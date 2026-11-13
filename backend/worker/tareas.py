@@ -10,6 +10,8 @@ from sqlalchemy import text
 from app.db import sesion_transaccion
 from app.ia.proveedor import ErrorIA
 from app.ia.servicios import evaluar_pendientes
+from worker.notificar import enviar_resumenes
+from worker.verificador import verificar
 from worker.correo.recolector import recolectar as recolectar_correo
 
 log = logging.getLogger("worker")
@@ -29,16 +31,18 @@ def actualizacion_diaria() -> None:
         ).all()
 
     for fuente_id, codigo in fuentes:
+        recolector = RECOLECTORES.get(codigo)
+        if recolector is None:  # p. ej. Jooble/Careerjet mientras no hay API key
+            log.info("Fuente %s sin recolector configurado; se omite", codigo)
+            continue
+
         with sesion_transaccion() as s:
             ejecucion_id = s.execute(
                 text("INSERT INTO ejecuciones (fuente_id) VALUES (:f) RETURNING id"),
                 {"f": fuente_id},
             ).scalar_one()
 
-        recolector = RECOLECTORES.get(codigo)
         try:
-            if recolector is None:
-                raise NotImplementedError(f"Recolector '{codigo}' aun no implementado")
             resultado = recolector()
             estado, error = "ok", None
         except Exception as exc:  # una fuente caida no detiene las demas
@@ -66,8 +70,16 @@ def actualizacion_diaria() -> None:
 
         log.info("Fuente %s: %s %s", codigo, estado, resultado)
 
-    # Despues de recolectar: puntaje con IA para las coincidencias nuevas o reprocesadas sin evaluar
+    _paso("Verificacion de vacantes cerradas", verificar)
+    _paso("Evaluacion IA", evaluar_pendientes)   # puntaje para nuevas o reprocesadas sin evaluar
+    _paso("Resumen por correo", enviar_resumenes)
+
+
+def _paso(nombre: str, funcion: Callable[[], dict]) -> None:
+    """Cada paso posterior es independiente: si uno falla, los demas siguen."""
     try:
-        log.info("Evaluacion IA: %s", evaluar_pendientes())
+        log.info("%s: %s", nombre, funcion())
     except ErrorIA as exc:
-        log.error("Evaluacion IA no disponible: %s", exc)
+        log.error("%s: IA no disponible: %s", nombre, exc)
+    except Exception:
+        log.exception("%s: fallo", nombre)

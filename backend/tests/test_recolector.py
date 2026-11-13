@@ -58,3 +58,22 @@ def test_flujo_reproceso(entorno):
         assert s.execute(text("SELECT count(*) FROM coincidencias")).scalar() == 14
         assert s.execute(text("SELECT max(veces_mostrada) FROM coincidencias")).scalar() == 3
         assert s.execute(text("SELECT count(*) FROM correos_procesados")).scalar() == 5
+
+
+def test_ventana_de_lectura(entorno):
+    from worker.correo.recolector import dias_a_leer
+
+    sesion, fuente_id = entorno
+    with sesion() as s:
+        s.execute(text("DELETE FROM ejecuciones"))
+        assert dias_a_leer(s, fuente_id) == 14                     # nunca ha corrido
+        s.execute(text("INSERT INTO ejecuciones (fuente_id, estado, fin) VALUES (:f, 'ok', now() - interval '1 hour')"),
+                  {"f": fuente_id})
+        assert dias_a_leer(s, fuente_id) == 3                      # corrio ayer: minimo 3
+        s.execute(text("UPDATE ejecuciones SET fin = now() - interval '9 days 2 hours'"))
+        assert dias_a_leer(s, fuente_id) == 11                     # PC apagado 9 dias: 10 + 1 de margen
+        s.execute(text("UPDATE ejecuciones SET fin = now() - interval '90 days'"))
+        assert dias_a_leer(s, fuente_id) == 30                     # tope
+        s.execute(text("INSERT INTO ejecuciones (fuente_id, estado, fin) VALUES (:f, 'error', now())"),
+                  {"f": fuente_id})
+        assert dias_a_leer(s, fuente_id) == 30                     # las fallidas no cuentan

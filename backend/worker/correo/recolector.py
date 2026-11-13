@@ -23,7 +23,20 @@ from worker.correo.modelos import VacanteExtraida
 
 log = logging.getLogger("worker.correo")
 
-DIAS_BUZON = 3  # ventana de lectura del buzon en cada corrida diaria
+# Ventana de lectura del buzon: desde la ultima corrida exitosa (con 1 dia de margen),
+# nunca menos de 3 dias (regla de reproceso) ni mas de 30 (si el equipo estuvo apagado mucho tiempo).
+DIAS_MIN, DIAS_MAX, DIAS_SIN_HISTORIAL = 3, 30, 14
+
+
+def dias_a_leer(s: Session, fuente_id: int) -> int:
+    dias = s.execute(
+        text("""SELECT ceil(EXTRACT(EPOCH FROM now() - max(fin)) / 86400) + 1
+                  FROM ejecuciones WHERE fuente_id = :f AND estado = 'ok'"""),
+        {"f": fuente_id},
+    ).scalar()
+    if dias is None:
+        return DIAS_SIN_HISTORIAL
+    return int(min(max(dias, DIAS_MIN), DIAS_MAX))
 
 
 def _huella(v: VacanteExtraida) -> str:
@@ -130,8 +143,11 @@ def recolectar() -> dict:
     total = {"leidas": 0, "nuevas": 0, "reprocesadas": 0, "correos": 0, "errores": 0}
     with sesion_transaccion() as s:
         fuente_id = s.execute(text("SELECT id FROM fuentes WHERE codigo = 'correo'")).scalar_one()
+        dias = dias_a_leer(s, fuente_id)
+    log.info("Leyendo el buzon: ultimos %s dias", dias)
+    total["dias_leidos"] = dias
 
-    for msg in mensajes_recientes(DIAS_BUZON):
+    for msg in mensajes_recientes(dias):
         try:
             with sesion_transaccion() as s:  # un correo con error no afecta a los demas
                 r = procesar_mensaje(s, fuente_id, msg)

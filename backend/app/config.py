@@ -21,6 +21,11 @@ class Config(BaseSettings):
     jooble_api_key: str = ""
     careerjet_api_key: str = ""
 
+    dominio: str = ""
+
+    smtp_servidor: str = "smtp.gmail.com"
+    smtp_puerto: int = 587
+
     imap_servidor: str = "imap.gmail.com"
     imap_usuario: str = ""
     imap_clave_aplicacion: str = ""

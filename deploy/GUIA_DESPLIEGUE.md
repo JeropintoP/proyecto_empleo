@@ -137,6 +137,13 @@ cd ~/proyecto_empleo && git pull
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
+Si la actualización trae un archivo nuevo en `db/init/` (por ejemplo `002_notificaciones.sql`),
+aplíquelo a la base existente (los scripts son seguros de repetir):
+
+```bash
+docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/002_notificaciones.sql
+```
+
 ## 13. Inactividad (importante)
 
 Oracle puede **detener** instancias gratuitas que pasan 7 días con CPU, red y memoria por
