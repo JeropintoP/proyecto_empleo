@@ -1,0 +1,5 @@
+# HTTPS automatico (Let's Encrypt). DOMINIO viene del .env, ej. proyectoempleo.duckdns.org
+{$DOMINIO} {
+    encode gzip
+    reverse_proxy web:80
+}
