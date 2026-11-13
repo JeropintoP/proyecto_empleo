@@ -14,8 +14,9 @@ class Config(BaseSettings):
 
     ia_proveedor: str = "groq"
     groq_api_key: str = ""
-    groq_modelo: str = "llama-3.3-70b-versatile"
+    groq_modelo: str = "openai/gpt-oss-120b"
     gemini_api_key: str = ""
+    gemini_modelo: str = "gemini-flash-latest"
 
     jooble_api_key: str = ""
     careerjet_api_key: str = ""

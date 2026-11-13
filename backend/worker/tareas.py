@@ -8,6 +8,8 @@ from collections.abc import Callable
 from sqlalchemy import text
 
 from app.db import sesion_transaccion
+from app.ia.proveedor import ErrorIA
+from app.ia.servicios import evaluar_pendientes
 from worker.correo.recolector import recolectar as recolectar_correo
 
 log = logging.getLogger("worker")
@@ -63,3 +65,9 @@ def actualizacion_diaria() -> None:
             s.execute(text("UPDATE fuentes SET ultima_ejecucion = now() WHERE id = :f"), {"f": fuente_id})
 
         log.info("Fuente %s: %s %s", codigo, estado, resultado)
+
+    # Despues de recolectar: puntaje con IA para las coincidencias nuevas o reprocesadas sin evaluar
+    try:
+        log.info("Evaluacion IA: %s", evaluar_pendientes())
+    except ErrorIA as exc:
+        log.error("Evaluacion IA no disponible: %s", exc)

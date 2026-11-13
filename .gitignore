@@ -21,3 +21,6 @@ uploads/
 
 # Correos de ejemplo: contienen datos personales y tokens de sesion
 backend/tests/fixtures/*.eml
+
+# Hojas de vida
+cv/

@@ -28,6 +28,8 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:8000:8000"   # solo local; Nginx la expondra en produccion
+    volumes:
+      - ./cv:/srv/cv:ro         # hojas de vida para `cargar-cv` (no se suben a GitHub)
 
   worker:
     build: ./backend
