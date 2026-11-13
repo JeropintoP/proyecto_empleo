@@ -24,3 +24,8 @@ backend/tests/fixtures/*.eml
 
 # Hojas de vida
 cv/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/

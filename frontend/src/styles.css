@@ -1,0 +1,45 @@
+:root {
+  --fondo: #f6f7f9; --fondo-2: #eef0f4; --tarjeta: #ffffff; --linea: #e2e5eb;
+  --texto: #1c2230; --sutil: #626b7a;
+  --acento: #2459c9; --acento-fondo: #e7eefc;
+  --alto: #1b7a46; --alto-fondo: #e3f4ea;
+  --medio: #9a6200; --medio-fondo: #fdf1dc;
+  --peligro: #b42318;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fondo: #12151b; --fondo-2: #1f242d; --tarjeta: #181c23; --linea: #2a303b;
+    --texto: #e8ebf0; --sutil: #9aa3b2;
+    --acento: #7aa2ff; --acento-fondo: #1d2a47;
+    --alto: #5fd394; --alto-fondo: #15301f;
+    --medio: #f2b84b; --medio-fondo: #33270f;
+    --peligro: #ff8a7a;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fondo); color: var(--texto); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.contenedor { max-width: 960px; margin: 0 auto; padding-left: 20px; padding-right: 20px; }
+h1 { font-size: 24px; letter-spacing: -0.01em; }
+.sutil { color: var(--sutil); }
+.tarjeta { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 12px; padding: 20px; }
+
+input, select, textarea {
+  font: inherit; color: inherit; background: var(--tarjeta);
+  border: 1px solid var(--linea); border-radius: 8px; padding: 9px 11px; width: 100%;
+}
+input[type="range"] { padding: 0; border: 0; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--acento); outline-offset: -1px; }
+
+button, .boton {
+  font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; display: inline-block;
+  border: 1px solid var(--linea); background: var(--tarjeta); color: var(--texto); border-radius: 8px; padding: 8px 14px;
+}
+button:hover, .boton:hover { background: var(--fondo-2); }
+button:disabled { opacity: .55; cursor: default; }
+.primario { background: var(--acento); border-color: var(--acento); color: #fff; }
+.primario:hover { background: var(--acento); filter: brightness(1.08); }
+
+.error { color: var(--peligro); font-size: 14px; margin: 0; }
+.aviso { color: var(--alto); background: var(--alto-fondo); padding: 10px 14px; border-radius: 8px; font-size: 14px; margin: 0; }

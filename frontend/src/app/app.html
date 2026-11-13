@@ -1,0 +1,18 @@
+@if (sesion.activa()) {
+  <header class="barra">
+    <div class="contenedor barra-interior">
+      <a routerLink="/" class="marca">Proyecto Empleo</a>
+      <nav>
+        <a routerLink="/" routerLinkActive="activo" [routerLinkActiveOptions]="{ exact: true }">Vacantes</a>
+        <a routerLink="/perfil" routerLinkActive="activo">Mi perfil</a>
+      </nav>
+      <div class="usuario">
+        <span>{{ sesion.nombre() }}</span>
+        <button class="tenue" (click)="sesion.cerrar()">Salir</button>
+      </div>
+    </div>
+  </header>
+  <main class="contenedor contenido"><router-outlet /></main>
+} @else {
+  <router-outlet />
+}

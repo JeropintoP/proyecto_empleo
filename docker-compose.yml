@@ -40,5 +40,13 @@ services:
       db:
         condition: service_healthy
 
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"   # en el paso de despliegue se agrega HTTPS (443)
+
 volumes:
   pgdata:

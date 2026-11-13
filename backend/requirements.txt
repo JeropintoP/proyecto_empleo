@@ -12,3 +12,4 @@ lxml==5.*
 pytest==8.*
 pypdf==5.*
 python-docx==1.*
+python-multipart==0.0.*

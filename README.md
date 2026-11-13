@@ -7,7 +7,7 @@ Buscador personal de vacantes con perfilamiento por IA. Uso privado (Jerónimo P
 ```
 proyecto_empleo/
 ├── index.html            # Página pública (GitHub Pages)
-├── docker-compose.yml    # db + api + worker
+├── docker-compose.yml    # db + api + worker + web
 ├── .env.example          # Plantilla de variables (copiar como .env)
 ├── db/init/              # Esquema SQL (se ejecuta al crear la base)
 └── backend/
@@ -17,7 +17,10 @@ proyecto_empleo/
     │   ├── seguridad.py  # Claves (bcrypt) y tokens (JWT)
     │   ├── cli.py        # Administración (crear usuarios)
     │   └── rutas/        # Endpoints
+    │   └── ia/           # Perfil, busquedas y puntaje con IA (Groq / Gemini)
     └── worker/           # Tarea diaria 6:00 a.m. (America/Bogota)
+        └── correo/       # Lectores de alertas (LinkedIn, Computrabajo)
+frontend/                 # Angular + Nginx (proxy /api)
 ```
 
 ## Puesta en marcha
@@ -26,6 +29,19 @@ proyecto_empleo/
 cp .env.example .env          # completar claves
 docker compose up -d --build
 curl http://127.0.0.1:8000/api/salud
+# Aplicacion web: http://localhost
+```
+
+Desarrollo del frontend (recarga en caliente, usa la API en :8000):
+
+```bash
+cd frontend && npm install && npx ng serve   # http://localhost:4200
+```
+
+Pruebas del backend:
+
+```bash
+cd backend && DATABASE_URL=postgresql+psycopg://... python -m pytest
 ```
 
 Crear usuarios (la clave se pide por consola):

@@ -1,0 +1,136 @@
+<section class="cabecera">
+  <div>
+    <h1>Vacantes</h1>
+    @if (resumen(); as r) {
+      <p class="sutil">
+        @if (r.ultima_actualizacion) {
+          Actualizado {{ r.ultima_actualizacion | date: "d MMM, h:mm a" }}
+        } @else {
+          Aún no hay actualizaciones
+        }
+        @if (r.sin_evaluar) {
+          · {{ r.sin_evaluar }} pendientes de evaluar
+        }
+      </p>
+    }
+  </div>
+</section>
+
+<nav class="pestanas" aria-label="Estado">
+  @for (p of pestanas; track p.valor) {
+    <button [class.activa]="filtros().estado === p.valor" (click)="cambiarFiltro({ estado: p.valor })">
+      {{ p.etiqueta }}
+      @if (conteo(p.valor) !== null) {
+        <span class="conteo">{{ conteo(p.valor) }}</span>
+      }
+    </button>
+  }
+</nav>
+
+<section class="filtros">
+  <input
+    type="search"
+    placeholder="Buscar cargo, empresa o ciudad"
+    [ngModel]="filtros().buscar"
+    (ngModelChange)="cambiarFiltro({ buscar: $event }, 350)"
+  />
+  <label class="rango">
+    Puntaje mínimo: <strong>{{ filtros().min_puntaje }}</strong>
+    <input
+      type="range" min="0" max="100" step="10"
+      [ngModel]="filtros().min_puntaje"
+      (ngModelChange)="cambiarFiltro({ min_puntaje: +$event }, 250)"
+    />
+  </label>
+  <select [ngModel]="filtros().orden" (ngModelChange)="cambiarFiltro({ orden: $event })">
+    <option value="puntaje">Mejor puntaje</option>
+    <option value="fecha">Más recientes</option>
+  </select>
+</section>
+
+@if (error()) {
+  <p class="error">{{ error() }}</p>
+}
+
+<section class="lista">
+  @for (c of items(); track c.id) {
+    <article class="vacante" [class.nueva]="c.estado === 'nueva'" [class.expandida]="abierta() === c.id">
+      <button class="resumen-vacante" (click)="alternar(c)" [attr.aria-expanded]="abierta() === c.id">
+        <span class="puntaje" [attr.data-nivel]="nivel(c.puntaje)">{{ c.puntaje ?? "–" }}</span>
+        <span class="datos">
+          <span class="titulo">
+            {{ c.titulo }}
+            @if (c.estado === 'nueva') { <span class="etiqueta nueva">Nueva</span> }
+            @if (c.estado === 'guardada') { <span class="etiqueta guardada">Guardada</span> }
+            @if (c.estado === 'postulada') { <span class="etiqueta postulada">Postulado</span> }
+            @if (c.veces_mostrada > 1) { <span class="etiqueta">Sigue abierta</span> }
+          </span>
+          <span class="meta">
+            {{ c.empresa || "Empresa no indicada" }}
+            @if (c.ubicacion) { · {{ c.ubicacion }} }
+            @if (c.modalidad) { · {{ c.modalidad }} }
+          </span>
+          @if (c.explicacion) {
+            <span class="explicacion">{{ c.explicacion }}</span>
+          }
+        </span>
+        <span class="lado">
+          @if (c.salario_texto) { <span class="salario">{{ c.salario_texto }}</span> }
+          @if (c.portal) { <span class="portal">{{ c.portal }}</span> }
+        </span>
+      </button>
+
+      @if (abierta() === c.id) {
+        <div class="detalle">
+          @if (c.fortalezas.length || c.brechas.length) {
+            <div class="columnas">
+              <div>
+                <h3>A favor</h3>
+                <ul>@for (f of c.fortalezas; track $index) { <li>{{ f }}</li> }</ul>
+              </div>
+              <div>
+                <h3>Por revisar</h3>
+                <ul>@for (b of c.brechas; track $index) { <li>{{ b }}</li> }</ul>
+              </div>
+            </div>
+          }
+          <label class="notas">
+            Notas
+            <textarea
+              rows="2" placeholder="Ej.: contacto, fecha de entrevista…"
+              [ngModel]="c.notas ?? ''" #n="ngModel" (blur)="guardarNotas(c, n.value)"
+            ></textarea>
+          </label>
+          <div class="acciones">
+            <a class="primario boton" [href]="c.url" target="_blank" rel="noopener" (click)="abrirOferta(c)">Ver oferta</a>
+            @if (c.estado !== 'guardada') { <button (click)="marcar(c, 'guardada')">Guardar</button> }
+            @if (c.estado !== 'postulada') { <button (click)="marcar(c, 'postulada')">Ya me postulé</button> }
+            @if (c.estado !== 'descartada') {
+              <button class="tenue" (click)="marcar(c, 'descartada')">Descartar</button>
+            } @else {
+              <button (click)="marcar(c, 'vista')">Restaurar</button>
+            }
+          </div>
+          <p class="sutil pie">
+            Recibida {{ c.creada_en | date: "d MMM" }}
+            @if (c.postulada_en) { · Postulado {{ c.postulada_en | date: "d MMM" }} }
+            @if (!c.abierta) { · La oferta parece cerrada }
+          </p>
+        </div>
+      }
+    </article>
+  } @empty {
+    @if (!cargando()) {
+      <p class="vacio">No hay vacantes con estos filtros.</p>
+    }
+  }
+</section>
+
+@if (hayMas()) {
+  <button class="mas" [disabled]="cargando()" (click)="cargar(true)">
+    Cargar más ({{ total() - items().length | number }} restantes)
+  </button>
+}
+@if (cargando() && !items().length) {
+  <p class="vacio">Cargando…</p>
+}

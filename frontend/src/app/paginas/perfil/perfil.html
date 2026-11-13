@@ -1,0 +1,89 @@
+<h1>Mi perfil</h1>
+
+@if (error()) { <p class="error">{{ error() }}</p> }
+@if (aviso()) { <p class="aviso">{{ aviso() }}</p> }
+
+<section class="tarjeta cv">
+  <div>
+    <h2>Hoja de vida</h2>
+    @if (perfil()?.cv_archivo) {
+      <p class="sutil">
+        Última carga: {{ perfil()?.cv_archivo }} · {{ perfil()?.actualizado_en | date: "d MMM y" }}
+      </p>
+    } @else {
+      <p class="sutil">Suba su hoja de vida para que la IA arme su perfil y sus búsquedas.</p>
+    }
+  </div>
+  <label class="boton primario" [class.deshabilitado]="subiendo()">
+    {{ subiendo() ? "Analizando… (puede tardar un minuto)" : "Subir PDF o Word" }}
+    <input type="file" accept=".pdf,.docx" hidden [disabled]="subiendo()" (change)="subir($event)" />
+  </label>
+</section>
+
+@if (perfil(); as p) {
+  @if (p.resumen) {
+    <section class="tarjeta">
+      <h2>Lo que entendió la IA</h2>
+      <p>{{ p.resumen }}</p>
+      <dl>
+        @if (p.nivel_educativo) { <dt>Educación</dt><dd>{{ p.nivel_educativo }}</dd> }
+        @if (p.anios_experiencia !== null) { <dt>Experiencia</dt><dd>{{ p.anios_experiencia }} años</dd> }
+        @if (p.idiomas.length) {
+          <dt>Idiomas</dt>
+          <dd>@for (i of p.idiomas; track $index) { {{ i.idioma }} ({{ i.nivel }}){{ $last ? "" : ", " }} }</dd>
+        }
+      </dl>
+      @if (p.habilidades.length) {
+        <h3>Habilidades</h3>
+        <div class="chips">
+          @for (h of p.habilidades; track $index) {
+            <span class="chip" [attr.data-nivel]="h.nivel">{{ h.nombre }}</span>
+          }
+        </div>
+      }
+      @if (p.busquedas.length) {
+        <h3>Búsquedas diarias</h3>
+        <div class="chips">
+          @for (b of p.busquedas; track $index) {
+            <span class="chip">{{ b.palabras_clave }} · {{ b.ubicacion }}</span>
+          }
+        </div>
+      }
+      @if (p.modelo_ia) { <p class="sutil modelo">Analizado con {{ p.modelo_ia }}</p> }
+    </section>
+  }
+
+  <form class="tarjeta preferencias" (ngSubmit)="guardar()">
+    <h2>Preferencias</h2>
+    <label>
+      Cargos que busco <span class="sutil">(separados por coma)</span>
+      <textarea name="cargos" rows="2" [(ngModel)]="cargos"></textarea>
+    </label>
+    <label>
+      Ciudades <span class="sutil">(separadas por coma)</span>
+      <input name="ciudades" [(ngModel)]="ciudades" placeholder="Cartagena, Barranquilla" />
+    </label>
+    <div class="dos">
+      <label>
+        Modalidad
+        <select name="modalidad" [(ngModel)]="modalidad">
+          <option value="indiferente">Me da igual</option>
+          <option value="presencial">Presencial</option>
+          <option value="hibrido">Híbrido</option>
+          <option value="remoto">Remoto</option>
+        </select>
+      </label>
+      <label>
+        Salario mínimo mensual (COP)
+        <input name="salario" type="number" min="0" step="100000" [(ngModel)]="salario" />
+      </label>
+    </div>
+    <label>
+      Descartar vacantes que contengan <span class="sutil">(separadas por coma)</span>
+      <input name="excluir" [(ngModel)]="excluir" placeholder="vendedor, call center" />
+    </label>
+    <button class="primario" type="submit" [disabled]="guardando()">
+      {{ guardando() ? "Guardando…" : "Guardar preferencias" }}
+    </button>
+  </form>
+}

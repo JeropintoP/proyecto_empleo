@@ -1,0 +1,25 @@
+:host { display: grid; gap: 16px; }
+h1 { margin: 0; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+h3 { font-size: 13px; color: var(--sutil); margin: 16px 0 8px; font-weight: 600; }
+
+.cv { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.cv p { margin: 0; }
+.deshabilitado { opacity: .6; pointer-events: none; }
+
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 12px 0 0; font-size: 14px; }
+dt { color: var(--sutil); }
+dd { margin: 0; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: var(--fondo-2); }
+.chip[data-nivel="avanzado"] { background: var(--alto-fondo); color: var(--alto); }
+.chip[data-nivel="intermedio"] { background: var(--acento-fondo); color: var(--acento); }
+.modelo { font-size: 12px; margin: 14px 0 0; }
+
+.preferencias { display: grid; gap: 14px; }
+.preferencias label { display: grid; gap: 6px; font-size: 14px; font-weight: 500; }
+.preferencias .sutil { font-weight: 400; }
+.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) { .dos { grid-template-columns: 1fr; } }
+.preferencias button { justify-self: start; }

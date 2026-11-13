@@ -1,0 +1,13 @@
+.barra { background: var(--tarjeta); border-bottom: 1px solid var(--linea); position: sticky; top: 0; z-index: 10; }
+.barra-interior { display: flex; align-items: center; gap: 24px; height: 56px; }
+.marca { font-weight: 700; color: var(--texto); text-decoration: none; }
+nav { display: flex; gap: 4px; flex: 1; }
+nav a { color: var(--sutil); text-decoration: none; padding: 6px 10px; border-radius: 8px; font-size: 14px; }
+nav a.activo { color: var(--texto); background: var(--fondo-2); font-weight: 500; }
+.usuario { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--sutil); }
+.tenue { padding: 6px 10px; }
+.contenido { padding-top: 28px; padding-bottom: 48px; }
+@media (max-width: 640px) {
+  .barra-interior { gap: 12px; }
+  .marca, .usuario span { display: none; }
+}
