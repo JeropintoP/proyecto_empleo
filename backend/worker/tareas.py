@@ -1,7 +1,6 @@
 """Tarea diaria de actualizacion de vacantes.
 
-Por ahora solo deja la estructura y la bitacora en `ejecuciones`.
-Cada recolector (Jooble, Careerjet, correo) se conecta en el siguiente paso.
+Recorre las fuentes activas, ejecuta su recolector y deja la bitacora en `ejecuciones`.
 """
 import logging
 from collections.abc import Callable
@@ -9,11 +8,16 @@ from collections.abc import Callable
 from sqlalchemy import text
 
 from app.db import sesion_transaccion
+from worker.correo.recolector import recolectar as recolectar_correo
 
 log = logging.getLogger("worker")
 
-# codigo de fuente -> funcion recolectora. Se llena en el paso 3.
-RECOLECTORES: dict[str, Callable[[], dict]] = {}
+# codigo de fuente -> funcion recolectora
+RECOLECTORES: dict[str, Callable[[], dict]] = {
+    "correo": recolectar_correo,
+    # "jooble": ...,     pendiente de API key
+    # "careerjet": ...,  pendiente de API key
+}
 
 
 def actualizacion_diaria() -> None:

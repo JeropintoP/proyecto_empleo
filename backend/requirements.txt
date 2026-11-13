@@ -7,3 +7,6 @@ bcrypt==4.2.*
 pyjwt==2.10.*
 apscheduler==3.10.*
 httpx==0.28.*
+beautifulsoup4==4.12.*
+lxml==5.*
+pytest==8.*
