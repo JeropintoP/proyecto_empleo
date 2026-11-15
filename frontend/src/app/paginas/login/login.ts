@@ -12,6 +12,9 @@ import { Sesion, mensajeError } from '../../nucleo/sesion';
       <form class="tarjeta" (ngSubmit)="entrar()">
         <h1>Proyecto Empleo</h1>
         <p class="sutil">Ingrese con su cuenta</p>
+        @if (demo) {
+          <p class="pista">Demostración: escriba cualquier correo y clave.</p>
+        }
 
         <label>
           Correo
@@ -37,12 +40,14 @@ import { Sesion, mensajeError } from '../../nucleo/sesion';
     h1 { margin: 0; font-size: 22px; }
     .sutil { margin: -8px 0 6px; }
     label { display: grid; gap: 6px; font-size: 14px; font-weight: 500; }
+    .pista { margin: -6px 0 0; font-size: 13px; background: var(--acento-fondo); color: var(--acento); padding: 8px 10px; border-radius: 8px; }
   `,
 })
 export class Login {
   private readonly sesion = inject(Sesion);
   private readonly router = inject(Router);
 
+  readonly demo = DEMO;
   email = '';
   clave = '';
   readonly cargando = signal(false);

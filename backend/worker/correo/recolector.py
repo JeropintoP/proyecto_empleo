@@ -57,15 +57,15 @@ def guardar_vacante(s: Session, fuente_id: int, usuario_id: str, v: VacanteExtra
             text("""
                 INSERT INTO vacantes (fuente_id, id_externo, titulo, empresa, ubicacion, modalidad,
                                       salario_texto, salario_min, salario_max, url,
-                                      fecha_publicacion, huella, datos_originales)
+                                      fecha_publicacion, descripcion, huella, datos_originales)
                 VALUES (:f, :e, :titulo, :empresa, :ubicacion, CAST(:modalidad AS modalidad_trabajo),
-                        :sal_txt, :sal_min, :sal_max, :url, :fecha, :huella, CAST(:datos AS jsonb))
+                        :sal_txt, :sal_min, :sal_max, :url, :fecha, :desc, :huella, CAST(:datos AS jsonb))
                 RETURNING id
             """),
             {"f": fuente_id, "e": v.id_externo, "titulo": v.titulo, "empresa": v.empresa,
              "ubicacion": v.ubicacion, "modalidad": v.modalidad, "sal_txt": v.salario_texto,
              "sal_min": v.salario_min, "sal_max": v.salario_max, "url": v.url,
-             "fecha": v.fecha_publicacion, "huella": _huella(v),
+             "fecha": v.fecha_publicacion, "desc": v.descripcion, "huella": _huella(v),
              "datos": json.dumps({"portal": v.portal, **v.extra}, ensure_ascii=False)},
         ).scalar_one()
         s.execute(

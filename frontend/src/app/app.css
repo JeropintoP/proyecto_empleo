@@ -11,3 +11,5 @@ nav a.activo { color: var(--texto); background: var(--fondo-2); font-weight: 500
   .barra-interior { gap: 12px; }
   .marca, .usuario span { display: none; }
 }
+
+.demo { background: var(--medio-fondo); color: var(--medio); text-align: center; font-size: 13px; padding: 6px 12px; font-weight: 500; }

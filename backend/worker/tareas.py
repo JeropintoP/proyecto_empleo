@@ -12,16 +12,18 @@ from app.ia.proveedor import ErrorIA
 from app.ia.servicios import evaluar_pendientes
 from worker.notificar import enviar_resumenes
 from worker.verificador import verificar
+from app.config import config
 from worker.correo.recolector import recolectar as recolectar_correo
+from worker.recolectores_api import recolectar_careerjet, recolectar_jooble
 
 log = logging.getLogger("worker")
 
 # codigo de fuente -> funcion recolectora
-RECOLECTORES: dict[str, Callable[[], dict]] = {
-    "correo": recolectar_correo,
-    # "jooble": ...,     pendiente de API key
-    # "careerjet": ...,  pendiente de API key
-}
+RECOLECTORES: dict[str, Callable[[], dict]] = {"correo": recolectar_correo}
+if config().jooble_api_key:
+    RECOLECTORES["jooble"] = recolectar_jooble
+if config().careerjet_api_key:
+    RECOLECTORES["careerjet"] = recolectar_careerjet
 
 
 def actualizacion_diaria() -> None:

@@ -142,7 +142,22 @@ aplíquelo a la base existente (los scripts son seguros de repetir):
 
 ```bash
 docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/002_notificaciones.sql
+docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/003_fuentes_api.sql
 ```
+
+## Activar Jooble y Careerjet (cuando lleguen las keys)
+
+En `.env`:
+
+| Variable | Valor |
+|---|---|
+| `JOOBLE_API_KEY` | la key de Jooble |
+| `JOOBLE_HOST` | `jooble.org`, o `co.jooble.org` si Jooble entrega la key para Colombia |
+| `CAREERJET_API_KEY` | la key de Careerjet |
+| `CAREERJET_USER_IP` | la IP pública del servidor |
+
+Luego `docker compose up -d` (reinicia el worker). Cada corrida consulta pocas búsquedas por fuente
+(parámetros `consultas_diarias_jooble` y `consultas_diarias_careerjet`) y las va rotando.
 
 ## 13. Inactividad (importante)
 

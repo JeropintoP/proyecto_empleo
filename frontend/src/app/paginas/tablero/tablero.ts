@@ -112,6 +112,14 @@ export class Tablero implements OnInit {
     }
   }
 
+  modalidad(m: string | null): string {
+    return ({ presencial: 'Presencial', remoto: 'Remoto', hibrido: 'Híbrido' } as Record<string, string>)[m ?? ''] ?? '';
+  }
+
+  portal(p: string | null): string {
+    return ({ linkedin: 'LinkedIn', computrabajo: 'Computrabajo', elempleo: 'Elempleo' } as Record<string, string>)[p ?? ''] ?? p ?? '';
+  }
+
   nivel(p: number | null): string {
     if (p === null) return 'pendiente';
     if (p >= 80) return 'alto';

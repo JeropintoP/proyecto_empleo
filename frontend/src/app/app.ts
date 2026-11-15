@@ -11,4 +11,5 @@ import { Sesion } from './nucleo/sesion';
 })
 export class App {
   protected readonly sesion = inject(Sesion);
+  protected readonly demo = DEMO;
 }

@@ -19,7 +19,10 @@ class Config(BaseSettings):
     gemini_modelo: str = "gemini-flash-latest"
 
     jooble_api_key: str = ""
+    jooble_host: str = "jooble.org"          # si Jooble entrega una key por pais: co.jooble.org
     careerjet_api_key: str = ""
+    careerjet_locale: str = "es_CO"
+    careerjet_user_ip: str = ""              # IP publica del servidor
 
     dominio: str = ""
 

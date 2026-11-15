@@ -51,7 +51,10 @@
             ],
             "styles": [
               "src/styles.css"
-            ]
+            ],
+            "define": {
+              "DEMO": "false"
+            }
           },
           "configurations": {
             "production": {
@@ -73,6 +76,26 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "demo": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "500kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "4kB",
+                  "maximumError": "8kB"
+                }
+              ],
+              "outputHashing": "all",
+              "define": {
+                "DEMO": "true"
+              },
+              "baseHref": "./",
+              "outputPath": "dist/demo"
             }
           },
           "defaultConfiguration": "production"
@@ -85,6 +108,9 @@
             },
             "development": {
               "buildTarget": "frontend:build:development"
+            },
+            "demo": {
+              "buildTarget": "frontend:build:demo"
             }
           },
           "defaultConfiguration": "development",

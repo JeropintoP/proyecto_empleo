@@ -42,7 +42,7 @@
 
 .lado { display: grid; justify-items: end; gap: 4px; font-size: 12px; }
 .salario { font-weight: 600; font-size: 13px; white-space: nowrap; }
-.portal { color: var(--sutil); text-transform: capitalize; }
+.portal { color: var(--sutil); }
 @media (max-width: 640px) {
   .resumen-vacante { grid-template-columns: 46px 1fr; }
   .lado { grid-column: 2; justify-items: start; }

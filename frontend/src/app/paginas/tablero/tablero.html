@@ -9,7 +9,7 @@
           Aún no hay actualizaciones
         }
         @if (r.sin_evaluar) {
-          · {{ r.sin_evaluar }} pendientes de evaluar
+          · {{ r.sin_evaluar }} {{ r.sin_evaluar === 1 ? "pendiente" : "pendientes" }} de evaluar
         }
       </p>
     }
@@ -68,7 +68,7 @@
           <span class="meta">
             {{ c.empresa || "Empresa no indicada" }}
             @if (c.ubicacion) { · {{ c.ubicacion }} }
-            @if (c.modalidad) { · {{ c.modalidad }} }
+            @if (modalidad(c.modalidad)) { · {{ modalidad(c.modalidad) }} }
           </span>
           @if (c.explicacion) {
             <span class="explicacion">{{ c.explicacion }}</span>
@@ -76,7 +76,7 @@
         </span>
         <span class="lado">
           @if (c.salario_texto) { <span class="salario">{{ c.salario_texto }}</span> }
-          @if (c.portal) { <span class="portal">{{ c.portal }}</span> }
+          @if (c.portal) { <span class="portal">{{ portal(c.portal) }}</span> }
         </span>
       </button>
 
