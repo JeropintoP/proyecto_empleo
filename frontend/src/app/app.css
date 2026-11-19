@@ -4,12 +4,19 @@
 nav { display: flex; gap: 4px; flex: 1; }
 nav a { color: var(--sutil); text-decoration: none; padding: 6px 10px; border-radius: 8px; font-size: 14px; }
 nav a.activo { color: var(--texto); background: var(--fondo-2); font-weight: 500; }
-.usuario { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--sutil); }
+.usuario { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.perfil { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; border-radius: 999px;
+  color: var(--sutil); text-decoration: none; }
+.perfil:hover { background: var(--fondo-2); color: var(--texto); }
+.perfil.activo { background: var(--fondo-2); color: var(--texto); font-weight: 500; }
+.avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--acento-fondo); color: var(--acento); font-size: 12px; font-weight: 700; }
 .tenue { padding: 6px 10px; }
 .contenido { padding-top: 28px; padding-bottom: 48px; }
 @media (max-width: 640px) {
   .barra-interior { gap: 12px; }
-  .marca, .usuario span { display: none; }
+  .marca, .nombre { display: none; }
+  .perfil { padding-right: 4px; }
 }
 
 .demo { background: var(--medio-fondo); color: var(--medio); text-align: center; font-size: 13px; padding: 6px 12px; font-weight: 500; }

@@ -140,7 +140,7 @@ def procesar_mensaje(s: Session, fuente_id: int, msg: EmailMessage, alias: str |
 
 def recolectar() -> dict:
     """Punto de entrada para el worker (fuente 'correo')."""
-    total = {"leidas": 0, "nuevas": 0, "reprocesadas": 0, "correos": 0, "errores": 0}
+    total = {"leidas": 0, "nuevas": 0, "reprocesadas": 0, "correos": 0, "omitidos": 0, "errores": 0}
     with sesion_transaccion() as s:
         fuente_id = s.execute(text("SELECT id FROM fuentes WHERE codigo = 'correo'")).scalar_one()
         dias = dias_a_leer(s, fuente_id)
@@ -152,11 +152,14 @@ def recolectar() -> dict:
             with sesion_transaccion() as s:  # un correo con error no afecta a los demas
                 r = procesar_mensaje(s, fuente_id, msg)
         except Exception:
-            log.exception("Error procesando %s", msg.get("Subject"))
+            log.exception("Error procesando una alerta de %s", str(msg.get("From", ""))[:60])
             total["errores"] += 1
             continue
         if "omitido" in r:
-            log.info("Omitido '%s': %s", msg.get("Subject"), r["omitido"])
+            # No se registra el asunto: el buzon puede recibir correos personales por error
+            total["omitidos"] += 1
+            if r["omitido"] != "remitente no reconocido":
+                log.warning("Alerta omitida: %s", r["omitido"])
             continue
         total["correos"] += 1
         for k in ("leidas", "nuevas", "reprocesadas"):

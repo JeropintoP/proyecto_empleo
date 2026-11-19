@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { Sesion } from './nucleo/sesion';
@@ -12,4 +12,7 @@ import { Sesion } from './nucleo/sesion';
 export class App {
   protected readonly sesion = inject(Sesion);
   protected readonly demo = DEMO;
+  protected readonly iniciales = computed(() =>
+    this.sesion.nombre().split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join(''),
+  );
 }
