@@ -60,13 +60,13 @@ def test_perfil_y_busquedas(usuario):
                       {"u": usuario}).one()
         assert p.cargos_objetivo == ["Administrador de bases de datos", "Analista de datos"]
         assert p.modelo_ia == "falso/modelo-prueba"
-        # 2 busquedas x 5 fuentes API (Jooble, Careerjet, Get on Board, Himalayas, Jobicy)
-        assert s.execute(text("SELECT count(*) FROM busquedas")).scalar() == 10
+        # 2 busquedas x 6 fuentes API (Jooble, Careerjet, Get on Board, Himalayas, Jobicy, SPE)
+        assert s.execute(text("SELECT count(*) FROM busquedas")).scalar() == 12
         assert s.execute(text("SELECT count(*) FROM uso_ia WHERE exito")).scalar() == 2
 
     generar_busquedas(usuario, lista=[falso])  # regenerar no duplica
     with sesion_transaccion() as s:
-        assert s.execute(text("SELECT count(*) FROM busquedas")).scalar() == 10
+        assert s.execute(text("SELECT count(*) FROM busquedas")).scalar() == 12
 
 
 def test_evaluar_con_exclusion_y_respaldo(usuario):

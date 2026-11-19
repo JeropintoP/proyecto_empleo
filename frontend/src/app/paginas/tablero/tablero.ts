@@ -26,6 +26,7 @@ const PORTALES: Record<string, { nombre: string; sitio: string }> = {
   careerjet: { nombre: 'Careerjet', sitio: 'https://www.careerjet.com.co/' },
   himalayas: { nombre: 'Himalayas', sitio: 'https://himalayas.app/' },
   jobicy: { nombre: 'Jobicy', sitio: 'https://jobicy.com/' },
+  spe: { nombre: 'Servicio Público de Empleo', sitio: 'https://www.buscadordeempleo.gov.co/' },
   smartrecruiters: { nombre: 'Página de la empresa', sitio: '' },
   successfactors: { nombre: 'Página de la empresa', sitio: '' },
   empresa: { nombre: 'Página de la empresa', sitio: '' },

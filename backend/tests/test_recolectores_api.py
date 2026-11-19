@@ -161,7 +161,7 @@ def test_registro_condicional(monkeypatch):
     monkeypatch.setattr(config(), "jooble_api_key", "")
     monkeypatch.setattr(config(), "careerjet_api_key", "x")
     importlib.reload(tareas)
-    assert set(tareas.RECOLECTORES) == {"correo", "getonbrd", "himalayas", "jobicy", "empresas", "careerjet"}
+    assert set(tareas.RECOLECTORES) == {"correo", "getonbrd", "himalayas", "jobicy", "empresas", "spe", "careerjet"}
 
 
 GETONBRD = {"data": [
@@ -327,3 +327,66 @@ def test_completar_ingles(entorno):
     assert en["DBA"] == "database administrator" and en["analista de datos"] == "data analyst"
     assert en["ingeniero de integracion"] == "ingeniero de integracion"   # sin traduccion: queda el original
     assert completar_ingles(lista=[Traductor()]) == 0                     # ya no hay faltantes
+
+
+# ----------------------------- Servicio Publico de Empleo -----------------------------
+def _spe(codigo, titulo, publicada, descripcion="", vence="2099-01-01", **extra):
+    return {"CODIGO_VACANTE": codigo, "TITULO_VACANTE": titulo, "DESCRIPCION_VACANTE": descripcion,
+            "RANGO_SALARIAL": "$4.000.001 - $6.000.000", "DEPARTAMENTO": "BOLÍVAR", "MUNICIPIO": "CARTAGENA",
+            "CARGO": extra.get("cargo"), "TELETRABAJO": extra.get("teletrabajo", 0),
+            "SECTOR_ECONOMICO": "Obras de ingenierÃ­a civil", "TIPO_CONTRATO": "Término fijo",
+            "FECHA_PUBLICACION": f"{publicada}T00:00:00.000Z", "FECHA_VENCIMIENTO": f"{vence}T00:00:00.000Z",
+            "DETALLES_PRESTADOR": [{"NOMBRE_PRESTADOR": "COMFENALCO CARTAGENA",
+                                    "URL_DETALLE_VACANTE": f"https://personas.serviciodeempleo.gov.co/detalle_oferta.aspx?sede_id={codigo}"}]}
+
+
+def test_spe_departamento_filtro_local_y_paginas(entorno):
+    from datetime import date, timedelta
+
+    from app.db import sesion_transaccion
+    from worker.spe import recolectar_spe
+
+    hoy = date.today()
+    reciente, vieja = hoy.isoformat(), (hoy - timedelta(days=30)).isoformat()
+    paginas = {
+        1: [_spe("1-1", "ANALISTA DE DATOS JUNIOR", reciente),
+            _spe("1-2", "Auxiliar de bodega", reciente),
+            _spe("1-3", "Profesional", reciente, "Se requiere experiencia en SQL", cargo="Analista de datos"),
+            _spe("1-4", "Ingeniera de integración", reciente, vence=(hoy - timedelta(days=2)).isoformat())],
+        2: [_spe("2-1", "DBA Oracle", vieja, teletrabajo=1)],    # todo viejo: no se pide la pagina 3
+        3: [_spe("3-1", "DBA SQL Server", vieja)],
+    }
+    with sesion_transaccion() as s:
+        s.execute(text("""INSERT INTO busquedas (perfil_id, fuente_id, palabras_clave, ubicacion)
+                          SELECT perfil_id, (SELECT id FROM fuentes WHERE codigo = 'spe'), palabras_clave, ubicacion
+                            FROM busquedas WHERE fuente_id = (SELECT id FROM fuentes WHERE codigo = 'jooble')"""))
+
+    peticiones = []
+
+    def manejar(req):
+        peticiones.append(req)
+        n = int(req.url.params["page"])
+        return httpx.Response(200, json={"resultados": paginas[n], "totalPages": 3, "currentPage": n})
+
+    r = recolectar_spe(httpx.Client(transport=httpx.MockTransport(manejar)), pausa=0)
+    assert [q.url.params["page"] for q in peticiones] == ["1", "2"]
+    assert peticiones[0].url.params["departamento"] == "BOLÍVAR"
+    assert (r["consultas"], r["leidas"], r["nuevas"]) == (2, 5, 3)   # bodega no coincide; la vencida se omite
+
+    with sesion_transaccion() as s:
+        v = s.execute(text("SELECT * FROM vacantes WHERE id_externo = 'spe:1-1'")).mappings().one()
+        assert v["ubicacion"] == "Cartagena, Bolívar" and v["empresa"] is None
+        assert (v["salario_min"], v["salario_max"]) == (4000001, 6000000)
+        assert v["url"].endswith("sede_id=1-1")
+        assert "Publicada por: COMFENALCO CARTAGENA" in v["descripcion"]
+        assert "Obras de ingeniería civil" in v["descripcion"]
+        assert set(s.execute(text("SELECT id_externo FROM vacantes")).scalars()) == {"spe:1-1", "spe:1-3", "spe:2-1"}
+        assert s.execute(text("SELECT modalidad::text FROM vacantes WHERE id_externo = 'spe:2-1'")).scalar() == "remoto"
+
+
+def test_coincide_sin_tildes_ni_genero():
+    from worker.recolectores_api import coincide
+
+    assert coincide("ingeniero mecánico", "INGENIERA MECANICA DE MANTENIMIENTO", None)
+    assert coincide("analista de datos", "Analista Datos", None)
+    assert not coincide("ingeniero mecánico", "Ingeniero de sistemas", "mecánica de fluidos")

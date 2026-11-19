@@ -12,6 +12,7 @@ import hashlib
 import html
 import logging
 import re
+import unicodedata
 from collections.abc import Callable
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -315,12 +316,18 @@ def recolectar_himalayas(cliente: httpx.Client | None = None) -> dict:
 # Terminos: no consultar mas de una vez por hora. Por eso se hace UNA consulta por corrida
 # (remotos para Latinoamerica) y se filtra localmente con las busquedas en ingles de cada usuario.
 # ---------------------------------------------------------------------
-_PALABRAS_VACIAS = {"de", "del", "la", "el", "en", "y", "a", "of", "the", "and", "in", "for", "jr", "sr"}
+_PALABRAS_VACIAS = {"de", "del", "la", "las", "el", "los", "en", "y", "a", "con", "para", "por", "un", "una",
+                    "of", "the", "and", "in", "for", "jr", "sr"}
 
 
 def _terminos(texto: str) -> list[str]:
-    return [t for t in re.findall(r"[a-z0-9+#]+", _limpiar(texto).lower() if texto else "")
-            if t not in _PALABRAS_VACIAS and len(t) > 1]
+    """Palabras sin tildes ni palabras vacias, recortadas a su raiz (6 letras) para que
+    'mecanico' coincida con 'mecánica' e 'ingeniero' con 'ingeniería'."""
+    if not texto:
+        return []
+    plano = unicodedata.normalize("NFKD", (_limpiar(texto) or "").lower())
+    plano = "".join(c for c in plano if not unicodedata.combining(c))
+    return [t[:6] for t in re.findall(r"[a-z0-9+#]+", plano) if t not in _PALABRAS_VACIAS and len(t) > 1]
 
 
 def coincide(busqueda: str, titulo: str, extracto: str | None) -> bool:
