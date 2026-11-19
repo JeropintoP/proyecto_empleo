@@ -5,6 +5,7 @@ Recorre las fuentes activas, ejecuta su recolector y deja la bitacora en `ejecuc
 import logging
 from collections.abc import Callable
 
+import httpx
 from sqlalchemy import text
 
 from app.config import config
@@ -17,6 +18,7 @@ from worker.spe import recolectar_spe
 from worker.notificar import enviar_resumenes
 from worker.recolectores_api import (recolectar_careerjet, recolectar_getonbrd, recolectar_himalayas,
                                      recolectar_jobicy, recolectar_jooble)
+from worker import horario
 from worker.verificador import verificar
 
 log = logging.getLogger("worker")
@@ -39,18 +41,49 @@ if config().careerjet_api_key:
 LLAVE_BLOQUEO = 7_315_001
 
 
-def actualizacion_diaria(enviar_resumen: bool = True) -> bool:
-    """Ejecuta la actualizacion completa. Devuelve False si ya habia otra en curso."""
+def actualizacion_programada() -> bool:
+    """La lanza el programador cada 3 horas. La de las 6 a.m. es la corrida completa."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    with sesion_transaccion() as s:
+        p = horario.parametros(s)
+        completa = horario.es_corrida_completa(s, datetime.now(ZoneInfo(p["zona"])))
+    return actualizacion_diaria(enviar_resumen=completa, completa=completa, programada=True)
+
+
+def actualizacion_diaria(enviar_resumen: bool = True, completa: bool = True, programada: bool = False) -> bool:
+    """Busca vacantes en todas las fuentes y las evalua con IA. Devuelve False si ya habia otra en curso.
+    completa: ademas verifica vacantes cerradas (y envia el resumen si enviar_resumen).
+    programada: la lanzo el programador (avisa a Healthchecks)."""
     with motor.connect() as conexion:
         if not conexion.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": LLAVE_BLOQUEO}).scalar():
             log.info("Ya hay una actualizacion en curso; se omite esta")
             return False
         try:
-            _ejecutar(enviar_resumen)
+            _ejecutar(enviar_resumen, completa)
+            if programada:
+                _avisar_healthcheck()
+        except Exception:
+            if programada:
+                _avisar_healthcheck("/fail")
+            raise
         finally:
             conexion.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": LLAVE_BLOQUEO})
             conexion.commit()
     return True
+
+
+def _avisar_healthcheck(sufijo: str = "") -> None:
+    """Le avisa a Healthchecks.io que la actualizacion diaria corrio. Si un dia no llega el aviso
+    (servidor caido, worker detenido), Healthchecks envia un correo. Nunca detiene la actualizacion."""
+    url = config().healthcheck_url
+    if not url:
+        return
+    try:
+        httpx.get(url.rstrip("/") + sufijo, timeout=10)
+    except httpx.HTTPError as exc:
+        log.warning("No se pudo avisar a Healthchecks: %s", type(exc).__name__)
 
 
 def actualizacion_en_curso() -> bool:
@@ -61,7 +94,7 @@ def actualizacion_en_curso() -> bool:
         ).scalar()
 
 
-def _ejecutar(enviar_resumen: bool) -> None:
+def _ejecutar(enviar_resumen: bool, completa: bool = True) -> None:
     with sesion_transaccion() as s:
         fuentes = s.execute(
             text("SELECT id, codigo FROM fuentes WHERE activa ORDER BY id")
@@ -107,9 +140,10 @@ def _ejecutar(enviar_resumen: bool) -> None:
 
         log.info("Fuente %s: %s %s", codigo, estado, resultado)
 
-    _paso("Verificacion de vacantes cerradas", verificar)
-    _paso("Evaluacion IA", evaluar_pendientes)   # puntaje para nuevas o reprocesadas sin evaluar
-    if enviar_resumen:  # en una actualizacion manual el usuario ya esta mirando el tablero
+    if completa:  # una vez al dia: visita el enlace de cada vacante abierta
+        _paso("Verificacion de vacantes cerradas", verificar)
+    _paso("Evaluacion IA", evaluar_pendientes)   # puntaje para nuevas o reprocesadas, con tope diario
+    if completa and enviar_resumen:  # en una actualizacion manual el usuario ya esta mirando el tablero
         _paso("Resumen por correo", enviar_resumenes)
 
 

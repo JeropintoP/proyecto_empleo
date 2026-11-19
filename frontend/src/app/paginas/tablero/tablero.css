@@ -16,6 +16,7 @@
   padding: 10px 12px; color: var(--sutil); white-space: nowrap;
 }
 .pestanas button.activa { color: var(--texto); border-bottom-color: var(--acento); font-weight: 600; }
+.pestanas .descartadas { margin-left: auto; font-size: 13px; }
 .conteo { margin-left: 6px; font-size: 12px; background: var(--fondo-2); padding: 1px 7px; border-radius: 999px; }
 
 .filtros { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; margin-bottom: 16px; }

@@ -29,3 +29,8 @@ cv/
 frontend/node_modules/
 frontend/dist/
 frontend/.angular/
+
+# Restos de editores (nano crea .save al guardar con error)
+*.save
+*.swp
+*~

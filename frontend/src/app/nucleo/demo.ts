@@ -160,7 +160,8 @@ export const interceptorDemo: HttpInterceptorFn = (req, next) => {
     const estado = params.get('estado');
     const min = Number(params.get('min_puntaje') ?? 0);
     const q = normalizar(params.get('buscar') ?? '');
-    let lista = VACANTES.filter((v) => (estado ? v.estado === estado : v.estado !== 'descartada'))
+    const enVista = (e: Estado) => (e === 'postulada' || e === 'descartada' ? e : 'por_aplicar');
+    let lista = VACANTES.filter((v) => (estado ? enVista(v.estado) === estado : v.estado !== 'descartada'))
       .filter((v) => (v.puntaje ?? 0) >= min)
       .filter((v) => !q || normalizar(`${v.titulo} ${v.empresa} ${v.ubicacion}`).includes(q));
     lista = params.get('orden') === 'fecha'

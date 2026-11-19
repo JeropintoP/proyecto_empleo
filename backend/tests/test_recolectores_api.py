@@ -60,7 +60,12 @@ def entorno(monkeypatch):
                                     FROM fuentes WHERE codigo = :c"""),
                           {"p": pid, "k": k, "u": u, "c": codigo, "i": 10 - i})
         s.execute(text("UPDATE parametros SET valor = '2' WHERE clave = 'consultas_diarias_jooble'"))
-    return uid
+        s.execute(text("UPDATE parametros SET valor = '4' WHERE clave = 'consultas_diarias_himalayas'"))
+        # Una corrida al dia: el cupo por corrida es el cupo diario completo
+        s.execute(text("UPDATE parametros SET valor = '0 6 * * *' WHERE clave = 'horario_busqueda'"))
+    yield uid
+    with sesion_transaccion() as s:
+        s.execute(text("UPDATE parametros SET valor = '0 */3 * * *' WHERE clave = 'horario_busqueda'"))
 
 
 def test_jooble_guarda_y_rota(entorno):
@@ -390,3 +395,16 @@ def test_coincide_sin_tildes_ni_genero():
     assert coincide("ingeniero mecánico", "INGENIERA MECANICA DE MANTENIMIENTO", None)
     assert coincide("analista de datos", "Analista Datos", None)
     assert not coincide("ingeniero mecánico", "Ingeniero de sistemas", "mecánica de fluidos")
+
+
+def test_cupo_diario_repartido_en_corridas(entorno):
+    """Con 8 corridas al dia, un cupo diario de 16 consultas da 2 por corrida."""
+    from app.db import sesion_transaccion
+    from worker.recolectores_api import recolectar_jooble
+
+    with sesion_transaccion() as s:
+        s.execute(text("UPDATE parametros SET valor = '0 */3 * * *' WHERE clave = 'horario_busqueda'"))
+        s.execute(text("UPDATE parametros SET valor = '16' WHERE clave = 'consultas_diarias_jooble'"))
+    peticiones = []
+    r = recolectar_jooble(transporte(peticiones, {"jooble.org": (200, {"jobs": []})}))
+    assert r["consultas"] == 2

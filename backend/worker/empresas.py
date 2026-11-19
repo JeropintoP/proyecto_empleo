@@ -8,8 +8,8 @@ Tres adaptadores, segun la tabla `empresas`:
                      vacantes (texto o direccion con "vacante", "empleo", "convocatoria", PDF...).
                      Solo funciona con paginas que traen las vacantes en el HTML (no armadas con JavaScript).
 
-Cada empresa se consulta como maximo una vez cada HORAS_ENTRE_REVISIONES: una peticion al dia por
-empresa en la corrida de las 6 a.m. Las vacantes se asignan al usuario de la empresa o, si no tiene,
+Cada empresa se consulta como maximo una vez cada HORAS_ENTRE_REVISIONES: una peticion por
+empresa en cada corrida programada (cada 3 horas). Las vacantes se asignan al usuario de la empresa o, si no tiene,
 a todos los usuarios activos; la IA decide despues si encajan con cada perfil.
 """
 import hashlib
@@ -31,7 +31,7 @@ from worker.recolectores_api import AGENTE, _fecha, _limpiar, _revisar_respuesta
 
 log = logging.getLogger("worker.empresas")
 
-HORAS_ENTRE_REVISIONES = 20
+HORAS_ENTRE_REVISIONES = 2.5   # una consulta por corrida (cada 3 h); evita repetir en actualizaciones manuales
 MAX_VACANTES_POR_EMPRESA = 60
 TIPOS = ("smartrecruiters", "successfactors", "pagina")
 
@@ -279,7 +279,7 @@ def recolectar_empresas(cliente: httpx.Client | None = None) -> dict:
             SELECT id, nombre, tipo::text AS tipo, identificador, pais, usuario_id
               FROM empresas
              WHERE activa AND (ultima_revision IS NULL
-                               OR ultima_revision < now() - make_interval(hours => :h))
+                               OR ultima_revision < now() - make_interval(secs => :h * 3600))
              ORDER BY ultima_revision NULLS FIRST"""), {"h": HORAS_ENTRE_REVISIONES}).mappings()]
         todos = [u for (u,) in s.execute(text("SELECT id FROM usuarios WHERE activo")).all()]
 

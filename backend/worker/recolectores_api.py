@@ -9,6 +9,7 @@ Si la fuente responde 401/403 (key invalida o revocada) o 429 (cupo agotado), se
 fuente en la corrida y el error queda en `ejecuciones`.
 """
 import hashlib
+import math
 import html
 import logging
 import re
@@ -22,6 +23,7 @@ from sqlalchemy import text
 
 from app.config import config
 from app.db import sesion_transaccion
+from worker.horario import corridas_por_dia
 from worker.correo.lectores import modalidad_desde, salario_cop
 from worker.correo.modelos import VacanteExtraida
 from worker.correo.recolector import guardar_vacante
@@ -168,8 +170,10 @@ def _recolectar(codigo: str, consultar: Callable, cliente: httpx.Client | None, 
     total = {"consultas": 0, "leidas": 0, "nuevas": 0, "reprocesadas": 0}
     with sesion_transaccion() as s:
         fuente_id = s.execute(text("SELECT id FROM fuentes WHERE codigo = :c"), {"c": codigo}).scalar_one()
-        cupo = int(s.execute(text("SELECT valor FROM parametros WHERE clave = :c"),
-                             {"c": f"consultas_diarias_{codigo}"}).scalar() or 4)
+        diarias = int(s.execute(text("SELECT valor FROM parametros WHERE clave = :c"),
+                                {"c": f"consultas_diarias_{codigo}"}).scalar() or 4)
+        # El cupo es diario: se reparte entre las corridas del dia (cada 3 h = 8 corridas)
+        cupo = max(1, math.ceil(diarias / corridas_por_dia(s)))
         busquedas = s.execute(
             text("""SELECT b.id, b.palabras_clave, b.palabras_clave_en, b.ubicacion, p.usuario_id
                       FROM busquedas b JOIN perfiles p ON p.id = b.perfil_id

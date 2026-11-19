@@ -26,6 +26,7 @@ class Config(BaseSettings):
     careerjet_user_ip: str = ""              # IP publica del servidor
 
     dominio: str = ""
+    healthcheck_url: str = ""      # p. ej. https://hc-ping.com/<uuid> (Healthchecks.io, gratis)
 
     smtp_servidor: str = "smtp.gmail.com"
     smtp_puerto: int = 587

@@ -1,4 +1,6 @@
 export type Estado = 'nueva' | 'vista' | 'guardada' | 'postulada' | 'descartada';
+/** Pestañas del tablero: 'por_aplicar' agrupa nueva, vista y guardada. */
+export type Vista = 'por_aplicar' | 'postulada' | 'descartada';
 export type Modalidad = 'presencial' | 'remoto' | 'hibrido' | 'indiferente';
 
 export interface Coincidencia {
@@ -53,7 +55,7 @@ export interface Perfil {
 }
 
 export interface FiltrosTablero {
-  estado?: Estado | '';
+  estado?: Vista;
   min_puntaje?: number;
   buscar?: string;
   orden?: 'puntaje' | 'fecha';

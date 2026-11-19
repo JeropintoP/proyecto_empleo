@@ -41,6 +41,11 @@
       }
     </button>
   }
+  <button class="descartadas" [class.activa]="filtros().estado === 'descartada'"
+          (click)="cambiarFiltro({ estado: filtros().estado === 'descartada' ? 'por_aplicar' : 'descartada' })">
+    {{ filtros().estado === "descartada" ? "← Volver" : "Descartadas" }}
+    @if (filtros().estado !== "descartada" && conteo("descartada")) { <span class="conteo">{{ conteo("descartada") }}</span> }
+  </button>
 </nav>
 
 <section class="filtros">
@@ -77,8 +82,6 @@
           <span class="titulo">
             {{ c.titulo }}
             @if (c.estado === 'nueva') { <span class="etiqueta nueva">Nueva</span> }
-            @if (c.estado === 'guardada') { <span class="etiqueta guardada">Guardada</span> }
-            @if (c.estado === 'postulada') { <span class="etiqueta postulada">Postulado</span> }
             @if (c.veces_mostrada > 1) { <span class="etiqueta">Sigue abierta</span> }
           </span>
           <span class="meta">
@@ -119,12 +122,18 @@
           </label>
           <div class="acciones">
             <a class="primario boton" [href]="c.url" target="_blank" rel="noopener" (click)="abrirOferta(c)">Ver oferta</a>
-            @if (c.estado !== 'guardada') { <button (click)="marcar(c, 'guardada')">Guardar</button> }
-            @if (c.estado !== 'postulada') { <button (click)="marcar(c, 'postulada')">Ya me postulé</button> }
-            @if (c.estado !== 'descartada') {
-              <button class="tenue" (click)="marcar(c, 'descartada')">Descartar</button>
-            } @else {
-              <button (click)="marcar(c, 'vista')">Restaurar</button>
+            @switch (c.estado) {
+              @case ("postulada") {
+                <button (click)="marcar(c, 'vista')">Volver a por aplicar</button>
+                <button class="tenue" (click)="marcar(c, 'descartada')">Descartar</button>
+              }
+              @case ("descartada") {
+                <button (click)="marcar(c, 'vista')">Restaurar</button>
+              }
+              @default {
+                <button (click)="marcar(c, 'postulada')">Aplicada</button>
+                <button class="tenue" (click)="marcar(c, 'descartada')">Descartar</button>
+              }
             }
           </div>
           <p class="sutil pie">
@@ -134,7 +143,7 @@
               Fuente: {{ portal(c.portal) }} ·
             }
             Recibida {{ c.creada_en | date: "d MMM" }}
-            @if (c.postulada_en) { · Postulado {{ c.postulada_en | date: "d MMM" }} }
+            @if (c.postulada_en) { · Aplicada el {{ c.postulada_en | date: "d MMM" }} }
             @if (!c.abierta) { · La oferta parece cerrada }
           </p>
         </div>

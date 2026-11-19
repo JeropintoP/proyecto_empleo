@@ -121,3 +121,76 @@ def test_verificador_no_consulta_red_interna(monkeypatch):
                            event_hooks={"request": [_solo_publicas]})
     assert estado_enlace(cliente, "http://169.254.169.254/latest/meta-data") == "desconocido"
     assert llamadas == []
+
+
+def test_aviso_healthcheck(monkeypatch):
+    import httpx
+
+    from worker import tareas
+
+    llamadas = []
+    monkeypatch.setattr(httpx, "get", lambda url, **kw: llamadas.append(url))
+    monkeypatch.setattr(tareas, "config", lambda: type("C", (), {"healthcheck_url": ""})())
+    tareas._avisar_healthcheck()
+    assert llamadas == []                       # sin URL configurada no hace nada
+    monkeypatch.setattr(tareas, "config", lambda: type("C", (), {"healthcheck_url": "https://hc-ping.com/abc/"})())
+    tareas._avisar_healthcheck()
+    tareas._avisar_healthcheck("/fail")
+    assert llamadas == ["https://hc-ping.com/abc", "https://hc-ping.com/abc/fail"]
+
+
+@con_bd
+def test_horario_cada_3_horas():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.db import sesion_transaccion
+    from worker import horario
+
+    bogota = ZoneInfo("America/Bogota")
+    with sesion_transaccion() as s:
+        assert horario.corridas_por_dia(s) == 8
+        assert horario.es_corrida_completa(s, datetime(2026, 11, 20, 6, 0, 3, tzinfo=bogota))
+        assert not horario.es_corrida_completa(s, datetime(2026, 11, 20, 9, 0, 1, tzinfo=bogota))
+        assert not horario.es_corrida_completa(s, datetime(2026, 11, 20, 18, 0, tzinfo=bogota))
+
+
+@con_bd
+def test_corrida_programada_solo_completa_a_las_6(monkeypatch):
+    from unittest import mock
+
+    from worker import horario, tareas
+
+    llamadas = []
+    monkeypatch.setattr(tareas, "actualizacion_diaria", lambda **kw: llamadas.append(kw) or True)
+    for completa in (True, False):
+        monkeypatch.setattr(horario, "es_corrida_completa", lambda s, m, c=completa: c)
+        tareas.actualizacion_programada()
+    assert llamadas == [{"enviar_resumen": True, "completa": True, "programada": True},
+                        {"enviar_resumen": False, "completa": False, "programada": True}]
+
+    # En una corrida parcial no se verifican enlaces ni se envia el resumen
+    with mock.patch.object(tareas, "RECOLECTORES", {}), \
+         mock.patch.object(tareas, "verificar") as ver, \
+         mock.patch.object(tareas, "evaluar_pendientes", return_value={}) as ev, \
+         mock.patch.object(tareas, "enviar_resumenes") as res:
+        tareas._ejecutar(enviar_resumen=True, completa=False)
+    assert (ver.called, ev.called, res.called) == (False, True, False)
+
+
+@con_bd
+def test_cupo_diario_de_evaluaciones():
+    from app.db import sesion_transaccion
+    from app.ia.servicios import cupo_evaluaciones
+
+    with sesion_transaccion() as s:
+        s.execute(text("DELETE FROM uso_ia"))
+        s.execute(text("UPDATE parametros SET valor = '5' WHERE clave = 'evaluaciones_diarias'"))
+        s.execute(text("""INSERT INTO uso_ia (proveedor, modelo, tarea, exito, creado_en) VALUES
+            ('groq', 'm', 'evaluar', TRUE, now() - interval '1 hour'),
+            ('groq', 'm', 'evaluar', TRUE, now() - interval '2 hours'),
+            ('groq', 'm', 'evaluar', FALSE, now()),
+            ('groq', 'm', 'evaluar', TRUE, now() - interval '25 hours')"""))
+        assert cupo_evaluaciones(s) == 3
+        s.execute(text("UPDATE parametros SET valor = '60' WHERE clave = 'evaluaciones_diarias'"))
+        s.execute(text("DELETE FROM uso_ia"))

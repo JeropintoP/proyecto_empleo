@@ -1,6 +1,6 @@
-"""Programador de tareas. Lee el horario de la tabla `parametros`.
+"""Programador de tareas. Lee los horarios de la tabla `parametros` (ver worker/horario.py).
 
-Ejecucion manual (sin esperar a las 6 a.m.):
+Ejecucion manual completa (sin esperar):
     docker compose exec worker python -m worker.main --ahora
 """
 import logging
@@ -8,20 +8,14 @@ import sys
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy import text
 
 from app.db import sesion_transaccion
-from worker.tareas import actualizacion_diaria
+from worker import horario
+from worker.tareas import actualizacion_diaria, actualizacion_programada
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("worker")
 logging.getLogger("httpx").setLevel(logging.WARNING)  # no registrar URLs (la de Jooble lleva la key)
-
-
-def leer_parametros() -> tuple[str, str]:
-    with sesion_transaccion() as s:
-        p = dict(s.execute(text("SELECT clave, valor FROM parametros")).all())
-    return p["horario_actualizacion"], p["zona_horaria"]
 
 
 def main() -> None:
@@ -29,17 +23,20 @@ def main() -> None:
         actualizacion_diaria()
         return
 
-    horario, zona = leer_parametros()
-    programador = BlockingScheduler(timezone=zona)
+    with sesion_transaccion() as s:
+        p = horario.parametros(s)
+        corridas = horario.corridas_por_dia(s)
+    programador = BlockingScheduler(timezone=p["zona"])
     programador.add_job(
-        actualizacion_diaria,
-        CronTrigger.from_crontab(horario, timezone=zona),
-        id="actualizacion_diaria",
+        actualizacion_programada,
+        CronTrigger.from_crontab(p["busqueda"], timezone=p["zona"]),
+        id="busqueda",
         max_instances=1,
         coalesce=True,
-        misfire_grace_time=3600,  # si el servidor estaba caido a las 6, corre al volver (hasta 1 h)
+        misfire_grace_time=1800,  # si el servidor estaba caido a la hora, corre al volver (hasta 30 min)
     )
-    log.info("Worker iniciado. Actualizacion diaria: '%s' (%s)", horario, zona)
+    log.info("Worker iniciado. Busqueda: '%s' (%d corridas al dia); corrida completa: '%s' (%s)",
+             p["busqueda"], corridas, p["completa"], p["zona"])
     programador.start()
 
 

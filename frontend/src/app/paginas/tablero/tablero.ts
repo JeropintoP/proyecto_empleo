@@ -4,16 +4,16 @@ import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
 import { Api } from '../../nucleo/api';
-import { Coincidencia, Estado, EstadoActualizacion, FiltrosTablero, Resumen } from '../../nucleo/modelos';
+import { Coincidencia, Estado, EstadoActualizacion, FiltrosTablero, Resumen, Vista } from '../../nucleo/modelos';
 import { mensajeError } from '../../nucleo/sesion';
 
-const PESTANAS: { valor: Estado | ''; etiqueta: string }[] = [
-  { valor: '', etiqueta: 'Activas' },
-  { valor: 'nueva', etiqueta: 'Nuevas' },
-  { valor: 'guardada', etiqueta: 'Guardadas' },
-  { valor: 'postulada', etiqueta: 'Postuladas' },
-  { valor: 'descartada', etiqueta: 'Descartadas' },
+const PESTANAS: { valor: Vista; etiqueta: string }[] = [
+  { valor: 'por_aplicar', etiqueta: 'Por aplicar' },
+  { valor: 'postulada', etiqueta: 'Aplicadas' },
 ];
+
+/** Pestaña a la que pertenece cada estado. */
+export const vistaDe = (e: Estado): Vista => (e === 'postulada' || e === 'descartada' ? e : 'por_aplicar');
 const TAMANO = 30;
 
 // Nombre y sitio de cada fuente. Himalayas y Jobicy exigen credito visible con enlace.
@@ -42,7 +42,7 @@ export class Tablero implements OnInit, OnDestroy {
   private readonly api = inject(Api);
 
   readonly pestanas = PESTANAS;
-  readonly filtros = signal<FiltrosTablero>({ estado: '', min_puntaje: 0, buscar: '', orden: 'puntaje' });
+  readonly filtros = signal<FiltrosTablero>({ estado: 'por_aplicar', min_puntaje: 0, buscar: '', orden: 'puntaje' });
   readonly items = signal<Coincidencia[]>([]);
   readonly total = signal(0);
   readonly resumen = signal<Resumen | null>(null);
@@ -109,16 +109,14 @@ export class Tablero implements OnInit, OnDestroy {
     return 'sin datos';
   }
 
-  conteo(estado: Estado | ''): number | null {
+  conteo(vista: Vista): number | null {
     const r = this.resumen();
     if (!r) return null;
-    if (estado === '') {
-      return Object.entries(r.por_estado)
-        .filter(([e]) => e !== 'descartada')
-        .reduce((s, [, n]) => s + (n ?? 0), 0);
-    }
-    return r.por_estado[estado] ?? 0;
+    return Object.entries(r.por_estado)
+      .filter(([e]) => vistaDe(e as Estado) === vista)
+      .reduce((s, [, n]) => s + (n ?? 0), 0);
   }
+
 
   cambiarFiltro(cambio: Partial<FiltrosTablero>, demora = 0): void {
     this.filtros.update((f) => ({ ...f, ...cambio }));
@@ -158,8 +156,7 @@ export class Tablero implements OnInit, OnDestroy {
     try {
       const r = await firstValueFrom(this.api.cambiar(c.id, { estado }));
       this.items.update((lista) => lista.map((x) => (x.id === c.id ? { ...x, estado: r.estado } : x)));
-      const filtro = this.filtros().estado;
-      const sale = (filtro && filtro !== estado) || (!filtro && estado === 'descartada');
+      const sale = vistaDe(estado) !== this.filtros().estado;
       if (recargar && sale) {
         this.items.update((lista) => lista.filter((x) => x.id !== c.id));
         this.total.update((t) => t - 1);

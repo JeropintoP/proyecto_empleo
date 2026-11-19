@@ -1,7 +1,7 @@
 # Despliegue en Oracle Cloud (Always Free)
 
 Resultado: la aplicación en `https://<subdominio>.duckdns.org`, encendida 24/7, con HTTPS,
-actualización diaria a las 6:00 a.m. y respaldo diario de la base de datos.
+búsqueda de vacantes cada 3 horas (la de las 6:00 a.m. además verifica cerradas y envía el resumen) y respaldo diario de la base de datos.
 
 ---
 
@@ -116,19 +116,44 @@ docker compose exec worker python -m worker.main --ahora
 docker compose logs worker --tail 30
 ```
 
-## 11. Respaldo diario
+## 11. Respaldo diario (cifrado y fuera del servidor)
+Los respaldos se cifran y se copian a **Backblaze B2** (10 GB gratis, no pide tarjeta), para que no se
+pierdan si Oracle reclama la máquina.
 
+1. Genere la clave de cifrado, póngala en el `.env` como `RESPALDO_CLAVE` y **guárdela también fuera
+   del servidor** (gestor de contraseñas): sin ella los respaldos no se pueden abrir.
+   ```bash
+   openssl rand -hex 32
+   ```
+2. Cree una cuenta en https://www.backblaze.com/cloud-storage, un *bucket* privado
+   `proyecto-empleo-respaldos` y una *Application Key* limitada a ese bucket.
+3. Instale y configure rclone (le pide el keyID y la applicationKey; nombre del remoto: `b2`):
+   ```bash
+   sudo apt-get install -y rclone
+   rclone config      # n -> nombre: b2 -> tipo: b2 -> keyID / applicationKey -> resto por defecto
+   ```
+   y en el `.env`: `RESPALDO_DESTINO=b2:proyecto-empleo-respaldos`
+4. Pruebe y programe:
+   ```bash
+   mkdir -p ~/respaldos
+   ./deploy/respaldo.sh && rclone ls b2:proyecto-empleo-respaldos
+   crontab -e
+   30 5 * * * /home/ubuntu/proyecto_empleo/deploy/respaldo.sh >> /home/ubuntu/respaldos/respaldo.log 2>&1
+   ```
+
+Restaurar un respaldo (desde el servidor o bajándolo antes con `rclone copy`):
 ```bash
-mkdir -p ~/respaldos
-crontab -e
-# agregar esta línea:
-30 5 * * * /home/ubuntu/proyecto_empleo/deploy/respaldo.sh >> /home/ubuntu/respaldos/respaldo.log 2>&1
+set -a; source .env; set +a
+gpg --batch --pinentry-mode loopback --passphrase "$RESPALDO_CLAVE" -d ~/respaldos/proyecto_empleo_AAAA-MM-DD.sql.gz.gpg \
+  | gunzip | docker compose exec -T db psql -U empleo -d proyecto_empleo
 ```
 
-Restaurar un respaldo:
-```bash
-gunzip -c ~/respaldos/proyecto_empleo_AAAA-MM-DD.sql.gz | docker compose exec -T db psql -U empleo -d proyecto_empleo
-```
+### Aviso si la búsqueda programada no corre
+1. Cree una cuenta gratis en https://healthchecks.io y un *check* con periodo **3 horas** y gracia **1 hora**
+   (la búsqueda corre cada 3 horas y avisa en cada corrida).
+2. Copie su URL de ping en el `.env` como `HEALTHCHECK_URL` y reinicie el worker:
+   `docker compose up -d --force-recreate worker`.
+3. Si una búsqueda programada no corre o falla, Healthchecks le envía un correo.
 
 ## 12. Actualizar la aplicación
 
@@ -147,6 +172,7 @@ docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/004_getonb
 docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/005_himalayas_jobicy.sql
 docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/006_empresas.sql
 docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/007_spe.sql
+docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/008_cada_3_horas.sql
 ```
 
 ## Activar Jooble y Careerjet (cuando lleguen las keys)

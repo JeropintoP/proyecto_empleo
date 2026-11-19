@@ -12,6 +12,9 @@ from app.db import obtener_sesion
 router = APIRouter(tags=["tablero"])
 
 Estado = Literal["nueva", "vista", "guardada", "postulada", "descartada"]
+# Pestanas del tablero: "por_aplicar" agrupa todo lo que no se ha aplicado ni descartado
+Vista = Literal["por_aplicar", "nueva", "vista", "guardada", "postulada", "descartada"]
+POR_APLICAR = ("nueva", "vista", "guardada")
 
 
 @router.get("/resumen")
@@ -30,7 +33,7 @@ def resumen(usuario: dict = Depends(usuario_actual), sesion: Session = Depends(o
 
 @router.get("/coincidencias")
 def listar(
-    estado: Estado | None = None,
+    estado: Vista | None = None,
     min_puntaje: int = Query(0, ge=0, le=100),
     buscar: str | None = Query(None, max_length=80),
     orden: Literal["puntaje", "fecha"] = "puntaje",
@@ -41,7 +44,9 @@ def listar(
 ) -> dict:
     filtros = ["c.usuario_id = :u", "COALESCE(c.puntaje, 0) >= :min"]
     params: dict = {"u": usuario["id"], "min": min_puntaje, "lim": limite, "off": desplazamiento}
-    if estado:
+    if estado == "por_aplicar":
+        filtros.append("c.estado IN ('nueva', 'vista', 'guardada')")
+    elif estado:
         filtros.append("c.estado = CAST(:estado AS estado_coincidencia)")
         params["estado"] = estado
     else:

@@ -18,7 +18,7 @@ proyecto_empleo/
     │   ├── cli.py        # Administración (crear usuarios)
     │   └── rutas/        # Endpoints
     │   └── ia/           # Perfil, busquedas y puntaje con IA (Groq / Gemini)
-    └── worker/           # Tarea diaria 6:00 a.m. (America/Bogota)
+    └── worker/           # Busqueda cada 3 h; corrida completa 6:00 a.m. (America/Bogota)
         └── correo/       # Lectores de alertas (LinkedIn, Computrabajo)
 frontend/                 # Angular + Nginx (proxy /api)
 ```

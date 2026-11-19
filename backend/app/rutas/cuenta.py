@@ -63,7 +63,7 @@ def estado_actualizacion(usuario: dict = Depends(usuario_actual),
 def _correr() -> None:
     from worker.tareas import actualizacion_diaria
     try:
-        actualizacion_diaria(enviar_resumen=False)
+        actualizacion_diaria(enviar_resumen=False, completa=False)
     except Exception:
         log.exception("Fallo la actualizacion manual")
 

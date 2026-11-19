@@ -130,7 +130,7 @@ def test_actualizar_ahora(cliente):
     with mock.patch("worker.tareas.actualizacion_diaria", return_value=True) as tarea:
         r = cliente.post("/api/actualizar", headers=h)
         assert r.status_code == 202 and r.json()["en_curso"] is True
-        tarea.assert_called_once_with(enviar_resumen=False)              # sin correo en la manual
+        tarea.assert_called_once_with(enviar_resumen=False, completa=False)              # sin correo en la manual
 
     estado = cliente.get("/api/actualizar", headers=h).json()
     correo = next(f for f in estado["fuentes"] if f["codigo"] == "correo")
@@ -162,4 +162,4 @@ def test_bloqueo_una_sola_actualizacion():
     assert tareas.actualizacion_en_curso() is False
     with mock.patch.object(tareas, "_ejecutar") as ejecutar:
         assert tareas.actualizacion_diaria() is True
-        ejecutar.assert_called_once_with(True)
+        ejecutar.assert_called_once_with(True, True)

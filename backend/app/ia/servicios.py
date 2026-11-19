@@ -115,9 +115,20 @@ def completar_ingles(lista: list[Proveedor] | None = None) -> int:
 # ---------------------------------------------------------------------
 # 3. Evaluar coincidencias pendientes
 # ---------------------------------------------------------------------
-def evaluar_pendientes(limite: int = 60, lista: list[Proveedor] | None = None) -> dict:
-    """Evalua coincidencias sin puntaje. El limite protege la cuota gratuita diaria."""
+def cupo_evaluaciones(s) -> int:
+    """Evaluaciones que quedan en las ultimas 24 h (parametro evaluaciones_diarias, 60 por defecto).
+    Con corridas cada 3 horas, el tope es por dia y no por corrida: protege la cuota gratuita de la IA."""
+    diarias = int(s.execute(text("SELECT valor FROM parametros WHERE clave = 'evaluaciones_diarias'")).scalar() or 60)
+    hechas = s.execute(text("""SELECT count(*) FROM uso_ia
+                                WHERE tarea = 'evaluar' AND exito AND creado_en > now() - interval '24 hours'""")).scalar()
+    return max(0, diarias - hechas)
+
+
+def evaluar_pendientes(limite: int | None = None, lista: list[Proveedor] | None = None) -> dict:
+    """Evalua coincidencias sin puntaje, sin pasar del cupo diario de evaluaciones."""
     with sesion_transaccion() as s:
+        if limite is None:
+            limite = cupo_evaluaciones(s)
         pendientes = s.execute(
             text("""
                 SELECT c.id, c.usuario_id, v.titulo, v.empresa, v.ubicacion, v.modalidad::text AS modalidad,
