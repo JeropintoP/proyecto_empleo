@@ -11,6 +11,7 @@ import hashlib
 import json
 import logging
 from email.message import EmailMessage
+from email.utils import parseaddr
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -18,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.config import config
 from app.db import sesion_transaccion
 from worker.correo.imap import alias_destino, mensajes_recientes
-from worker.correo.lectores import lector_para
+from worker.correo.lectores import lector_para, remitente_original
 from worker.correo.modelos import VacanteExtraida
 
 log = logging.getLogger("worker.correo")
@@ -110,15 +111,25 @@ def guardar_vacante(s: Session, fuente_id: int, usuario_id: str, v: VacanteExtra
 def procesar_mensaje(s: Session, fuente_id: int, msg: EmailMessage, alias: str | None = None) -> dict:
     remitente = str(msg.get("From", ""))
     lector = lector_para(remitente)
+    reenvio_manual = False
     if lector is None:
-        return {"omitido": "remitente no reconocido"}
+        original = remitente_original(msg)
+        lector = lector_para(original) if original else None
+        if lector is None:
+            return {"omitido": "remitente no reconocido"}
+        reenvio_manual = True
 
     alias = alias or alias_destino(msg, config().imap_usuario)
-    usuario_id = s.execute(
-        text("SELECT id FROM usuarios WHERE alias_correo = :a AND activo"), {"a": alias}
-    ).scalar() if alias else None
-    if usuario_id is None:
+    usuario = s.execute(
+        text("SELECT id, email FROM usuarios WHERE alias_correo = :a AND activo"), {"a": alias}
+    ).first() if alias else None
+    if usuario is None:
         return {"omitido": f"alias sin usuario: {alias}"}
+    usuario_id = usuario.id
+
+    # Un reenvio manual solo se acepta si lo envia el propio usuario desde su correo registrado
+    if reenvio_manual and parseaddr(remitente)[1].lower() != usuario.email.lower():
+        return {"omitido": "reenvio manual desde un correo que no es el del usuario"}
 
     vacantes = lector(msg)
     conteo = {"nueva": 0, "reprocesada": 0, "omitida": 0}

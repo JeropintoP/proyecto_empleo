@@ -77,3 +77,54 @@ def test_ventana_de_lectura(entorno):
         s.execute(text("INSERT INTO ejecuciones (fuente_id, estado, fin) VALUES (:f, 'error', now())"),
                   {"f": fuente_id})
         assert dias_a_leer(s, fuente_id) == 30                     # las fallidas no cuentan
+
+
+def _reenvio_gmail(original, de_usuario, para_alias, idioma="es"):
+    """Simula un reenvio manual de Gmail: texto y HTML con el encabezado del mensaje original."""
+    from email.message import EmailMessage
+    from html import escape
+
+    marca, etiqueta = (("Mensaje reenviado", "De") if idioma == "es" else ("Forwarded message", "From"))
+    remitente = str(original["From"])
+    msg = EmailMessage()
+    msg["From"] = de_usuario
+    msg["To"] = f"dstogether01+{para_alias}@gmail.com"
+    msg["Delivered-To"] = f"dstogether01+{para_alias}@gmail.com"
+    msg["Subject"] = f"Fwd: {original['Subject']}"
+    msg["Message-ID"] = "<reenvio-prueba@mail.gmail.com>"
+    plano = original.get_body(("plain",))
+    encabezado = f"---------- {marca} ---------\n{etiqueta}: {remitente}\nDate: hoy\n\n"
+    msg.set_content(encabezado + (plano.get_content() if plano else ""))
+    html = original.get_body(("html",))
+    if html:
+        msg.add_alternative(
+            f'<div dir="ltr"><div class="gmail_quote"><div class="gmail_attr">---------- {marca} ---------<br>'
+            f'{etiqueta}: <strong class="gmail_sendername">{escape(remitente.split("<")[0])}</strong> '
+            f'<span>&lt;{escape(remitente.split("<")[-1].rstrip(">"))}&gt;</span><br></div><br>'
+            f'{html.get_content()}</div></div>', subtype="html")
+    return msg
+
+
+def test_reenvio_manual(entorno):
+    from worker.correo.recolector import procesar_mensaje
+
+    sesion, fuente_id = entorno
+    computrabajo = _reenvio_gmail(cargar("computrabajo_1.eml"), "Jero <jeronimopinto@test.local>", "jeronimopinto")
+    linkedin = _reenvio_gmail(cargar("linkedin_1.eml"), "jeronimopinto@test.local", "jeronimopinto", idioma="en")
+    with sesion() as s:
+        assert procesar_mensaje(s, fuente_id, computrabajo)["nuevas"] == 7
+        assert procesar_mensaje(s, fuente_id, linkedin)["nuevas"] == 4
+
+    # Un tercero que reenvia una alerta al alias de otro usuario no puede meterle vacantes
+    ajeno = _reenvio_gmail(cargar("computrabajo_1.eml"), "otro@correo.com", "helenvisbal")
+    with sesion() as s:
+        assert "no es el del usuario" in procesar_mensaje(s, fuente_id, ajeno)["omitido"]
+
+    # Un correo personal reenviado (sin alerta adentro) se sigue omitiendo
+    from email.message import EmailMessage
+    personal = EmailMessage()
+    personal["From"] = "jeronimopinto@test.local"
+    personal["To"] = "dstogether01+jeronimopinto@gmail.com"
+    personal.set_content("---------- Mensaje reenviado ---------\nDe: RappiCard <no-reply@rappi.com>\n\nResumen")
+    with sesion() as s:
+        assert procesar_mensaje(s, fuente_id, personal) == {"omitido": "remitente no reconocido"}

@@ -190,3 +190,31 @@ def lector_para(remitente: str):
         if dominio in remitente:
             return lector
     return None
+
+
+# ---------------------------------------------------------------------
+# Reenvios manuales (el usuario reenvia una alerta desde su correo personal)
+# ---------------------------------------------------------------------
+_MARCA_REENVIO = re.compile(
+    r"-{5,}\s*(?:Forwarded message|Mensaje reenviado|Mensaje original|Original Message)\s*-{5,}", re.I)
+# "From: LinkedIn <jobalerts-noreply@linkedin.com>" / "De: Computrabajo <x@computrabajo.com>"
+# En HTML Gmail parte la linea en varias etiquetas: se busca el primer correo tras la etiqueta.
+_REMITENTE_ORIGINAL = re.compile(r"(?:From|De)\s*:\s*[^@]{0,120}?([\w.+-]+@[\w-]+(?:\.[\w-]+)+)", re.I)
+
+
+def remitente_original(msg: EmailMessage) -> str | None:
+    """Remitente de la alerta original dentro de un reenvio manual, o None si no es un reenvio."""
+    for tipo in ("plain", "html"):
+        parte = msg.get_body((tipo,))
+        if parte is None:
+            continue
+        texto = parte.get_content()
+        if tipo == "html":
+            texto = BeautifulSoup(texto, "lxml").get_text(" ")
+        marca = _MARCA_REENVIO.search(texto)
+        if not marca:
+            continue
+        m = _REMITENTE_ORIGINAL.search(texto[marca.end():marca.end() + 600])
+        if m:
+            return m.group(1).strip()
+    return None
