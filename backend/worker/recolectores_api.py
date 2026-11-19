@@ -98,38 +98,64 @@ def consultar_jooble(cliente: httpx.Client, palabras: str, ubicacion: str) -> li
 # ---------------------------------------------------------------------
 # Careerjet v4: GET https://search.api.careerjet.net/v4/query  (Basic auth "<key>:")
 # ---------------------------------------------------------------------
-def consultar_careerjet(cliente: httpx.Client, palabras: str, ubicacion: str) -> list[VacanteExtraida]:
+# Factor para llevar el salario a valor mensual segun salary_type
+_A_MENSUAL = {"M": 1, "Y": 1 / 12, "W": 52 / 12, "D": 22, "H": 8 * 22}
+
+
+def _salario_mensual_cop(valor, moneda: str | None, tipo: str | None) -> int | None:
+    """Solo se convierten a cifra los salarios en pesos; otras monedas quedan como texto."""
+    if not isinstance(valor, (int, float)) or valor <= 0 or (moneda or "").upper() != "COP":
+        return None
+    factor = _A_MENSUAL.get((tipo or "M").upper())
+    return round(valor * factor) if factor else None
+
+
+def _pedir_careerjet(cliente: httpx.Client, palabras: str, ubicacion: str | None) -> dict:
     cfg = config()
     params = {
         "locale_code": cfg.careerjet_locale, "keywords": palabras, "sort": "date", "page_size": 50,
+        "fragment_size": 500,  # extracto mas largo: ayuda a la IA a evaluar
         "user_ip": cfg.careerjet_user_ip or "127.0.0.1", "user_agent": AGENTE,
     }
-    if ubicacion and ubicacion.lower() != "colombia":  # sin ubicacion = todo el pais
+    if ubicacion:
         params["location"] = ubicacion
     r = cliente.get("https://search.api.careerjet.net/v4/query", params=params,
                     auth=(cfg.careerjet_api_key, ""),
                     headers={"Referer": "https://jeropintop.github.io/proyecto_empleo/"})
+    if r.status_code == 400:
+        raise FuenteDetenida(f"Careerjet: {r.text[:150]} (revise CAREERJET_LOCALE)")
     _revisar_respuesta(r, "Careerjet")
-    datos = r.json()
-    if datos.get("type") != "JOBS":  # p. ej. LOCATIONS cuando la ubicacion es ambigua
-        log.info("Careerjet '%s' en '%s': respuesta %s", palabras, ubicacion, datos.get("type"))
+    return r.json()
+
+
+def consultar_careerjet(cliente: httpx.Client, palabras: str, ubicacion: str) -> list[VacanteExtraida]:
+    lugar = None if not ubicacion or ubicacion.lower() == "colombia" else ubicacion  # sin lugar = todo el pais
+    datos = _pedir_careerjet(cliente, palabras, lugar)
+
+    # Modo ubicacion: varias coincidencias -> se toma la primera; ninguna -> todo el pais
+    if datos.get("type") == "LOCATIONS" and lugar:
+        opciones = datos.get("locations") or []
+        log.info("Careerjet: ubicacion '%s' %s", lugar, f"ambigua, se usa '{opciones[0]}'" if opciones else "no encontrada")
+        datos = _pedir_careerjet(cliente, palabras, opciones[0] if opciones else None)
+    if datos.get("type") != "JOBS":
         return []
+
     vacantes = []
     for j in datos.get("jobs") or []:
         if not j.get("title") or not j.get("url"):
             continue
-        titulo, empresa, lugar = _limpiar(j["title"]), _limpiar(j.get("company")), _limpiar(j.get("locations"))
+        titulo, empresa, lugar_j = _limpiar(j["title"]), _limpiar(j.get("company")), _limpiar(j.get("locations"))
         # Careerjet no entrega un id: se usa una huella estable del contenido
-        id_portal = hashlib.md5(f"{titulo}|{empresa}|{lugar}|{j.get('date')}".lower().encode()).hexdigest()
+        id_portal = hashlib.md5(f"{titulo}|{empresa}|{lugar_j}|{j.get('date')}".lower().encode()).hexdigest()
+        moneda, tipo = j.get("salary_currency_code"), j.get("salary_type")
         vacantes.append(VacanteExtraida(
             portal="careerjet", id_portal=id_portal, titulo=titulo, url=j["url"],
-            empresa=empresa, ubicacion=lugar, modalidad=modalidad_desde(f"{titulo} {lugar}"),
+            empresa=empresa, ubicacion=lugar_j, modalidad=modalidad_desde(f"{titulo} {lugar_j}"),
             salario_texto=_limpiar(j.get("salary")),
-            salario_min=_entero(j.get("salary_min")) or salario_cop(j.get("salary")),
-            salario_max=_entero(j.get("salary_max")),
+            salario_min=_salario_mensual_cop(j.get("salary_min"), moneda, tipo),
+            salario_max=_salario_mensual_cop(j.get("salary_max"), moneda, tipo),
             fecha_publicacion=_fecha(j.get("date")),
             descripcion=_limpiar(j.get("description")),
-            extra={"origen": j.get("site")} if j.get("site") else {},
         ))
     return vacantes
 

@@ -19,11 +19,16 @@ JOOBLE = {"totalCount": 2, "jobs": [
      "updated": "2026-11-13T10:00:00"},
 ]}
 
-CAREERJET = {"type": "JOBS", "hits": 1, "jobs": [
+# Estructura segun la documentacion oficial de Careerjet v4
+CAREERJET = {"type": "JOBS", "hits": 2, "message": "2 matching jobs found", "pages": 1, "jobs": [
     {"title": "Ingeniero de integración", "company": "Tecnología Costera", "date": "Fri, 13 Nov 2026 19:13:43 GMT",
-     "description": "APIs REST y <b>Python</b>", "locations": "Cartagena", "salary": "COP 5.000.000 mensual",
-     "salary_min": 5000000, "salary_max": 6000000, "site": "computrabajo.com",
+     "description": "APIs REST y <b>Python</b>", "locations": "Cartagena", "salary": "$5.000.000 - 6.000.000",
+     "salary_currency_code": "COP", "salary_min": 5000000.0, "salary_max": 6000000.0, "salary_type": "M",
      "url": "https://jobviewtrack.com/v2/abc"},
+    {"title": "Data Engineer", "company": "Global Co", "date": "Thu, 12 Nov 2026 10:00:00 GMT",
+     "description": "Remote", "locations": "Colombia", "salary": "$30000 - 36000",
+     "salary_currency_code": "USD", "salary_min": 30000.0, "salary_max": 36000.0, "salary_type": "Y",
+     "url": "https://jobviewtrack.com/v2/def"},
 ]}
 
 
@@ -88,18 +93,53 @@ def test_careerjet_parametros_y_campos(entorno):
 
     peticiones = []
     r = recolectar_careerjet(transporte(peticiones, {"search.api.careerjet.net": (200, CAREERJET)}))
-    assert r["consultas"] == 3 and r["nuevas"] == 1
+    assert r["consultas"] == 3 and r["nuevas"] == 2
     p = peticiones[0]
     assert p.url.path == "/v4/query"
     assert p.url.params["locale_code"] == "es_CO" and p.url.params["keywords"] == "DBA"
     assert p.url.params["location"] == "Cartagena" and "user_ip" in p.url.params
+    assert p.url.params["user_agent"] and p.url.params["fragment_size"] == "500"
     assert p.headers["Authorization"] == "Basic " + base64.b64encode(b"KEY-C:").decode()
     assert "location" not in peticiones[1].url.params                        # "Colombia" = todo el pais
     with sesion_transaccion() as s:
-        v = s.execute(text("SELECT * FROM vacantes WHERE fuente_id = (SELECT id FROM fuentes WHERE codigo='careerjet')")
-                      ).mappings().one()
-        assert (v["salario_min"], v["salario_max"]) == (5_000_000, 6_000_000)
+        v = s.execute(text("SELECT * FROM vacantes WHERE titulo = 'Ingeniero de integración'")).mappings().one()
+        assert (v["salario_min"], v["salario_max"]) == (5_000_000, 6_000_000)     # COP mensual
         assert v["descripcion"] == "APIs REST y Python" and v["fecha_publicacion"].day == 13
+        usd = s.execute(text("SELECT salario_min, salario_texto FROM vacantes WHERE titulo = 'Data Engineer'")).one()
+        assert usd == (None, "$30000 - 36000")                                      # USD anual: solo texto
+
+
+def test_careerjet_ubicacion_ambigua(entorno):
+    from worker.recolectores_api import consultar_careerjet
+
+    respuestas = iter([
+        (200, {"type": "LOCATIONS", "locations": ["Cartagena, Bolívar", "Cartagena, Chile"],
+               "message": "multiple locations found"}),
+        (200, CAREERJET),
+        (200, {"type": "LOCATIONS", "locations": [], "message": "no matching location found"}),
+        (200, CAREERJET),
+    ])
+    peticiones = []
+
+    def manejar(req):
+        peticiones.append(req)
+        codigo, cuerpo = next(respuestas)
+        return httpx.Response(codigo, json=cuerpo)
+
+    cliente = httpx.Client(transport=httpx.MockTransport(manejar))
+    assert len(consultar_careerjet(cliente, "DBA", "Cartagena")) == 2
+    assert peticiones[1].url.params["location"] == "Cartagena, Bolívar"          # primera opcion
+    assert len(consultar_careerjet(cliente, "DBA", "Cartagenita")) == 2
+    assert "location" not in peticiones[3].url.params                            # todo el pais
+
+
+def test_careerjet_locale_invalido(entorno):
+    from worker.recolectores_api import FuenteDetenida, consultar_careerjet
+
+    cliente = httpx.Client(transport=httpx.MockTransport(
+        lambda req: httpx.Response(400, text="Unsupported locale code")))
+    with pytest.raises(FuenteDetenida, match="CAREERJET_LOCALE"):
+        consultar_careerjet(cliente, "DBA", "Cartagena")
 
 
 def test_key_invalida_detiene_la_fuente(entorno):
