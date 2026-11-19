@@ -34,7 +34,8 @@ ON CONFLICT (codigo) DO NOTHING;
 -- Empresas iniciales (el sector naval de Cartagena y afines). Se pueden pausar o borrar desde la app.
 INSERT INTO empresas (nombre, tipo, identificador, pais) VALUES
     ('Konecranes', 'smartrecruiters', 'konecranes', 'co'),
-    ('Cotecmar',   'successfactors',  'https://career17.sapsf.com/career?company=cotecmarcoP', NULL),
+    -- Cotecmar usa SuccessFactors pero tiene desactivado el listado XML; se vigila su sitio en Elempleo
+    ('Cotecmar',   'pagina',          'https://www.elempleo.com/sitios-empresariales/colombia/cotecmar_08/oferta_sitio.asp', NULL),
     ('Astivik',    'pagina',          'https://astivik.buk.co/trabaja-con-nosotros', NULL),
     ('Dimar',      'pagina',          'https://www.dimar.mil.co/ofertas-de-empleo', NULL)
 ON CONFLICT (tipo, identificador) DO NOTHING;

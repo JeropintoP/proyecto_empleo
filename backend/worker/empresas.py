@@ -148,6 +148,9 @@ def consultar_successfactors(cliente: httpx.Client, empresa: dict) -> list[Vacan
     base = f"{url.scheme}://{url.netloc}/career"
     r = cliente.get(base, params={"company": compania, "career_ns": "job_listing_summary", "resultType": "XML"})
     _revisar_respuesta(r, "SuccessFactors")
+    if r.content.lstrip()[:5].lower() == b"<html" or "html" in r.headers.get("content-type", ""):
+        raise EmpresaInvalida("Esta empresa tiene desactivado el listado XML de SuccessFactors; "
+                              "busque si publica en otra pagina (p. ej. su sitio en Elempleo)")
     try:
         raiz = ET.fromstring(r.content)
     except ET.ParseError:

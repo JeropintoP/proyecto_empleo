@@ -180,3 +180,13 @@ def test_api_empresas(monkeypatch):
     r = c.post("/api/empresas/probar", headers=jero, json={"nombre": "Astivik", "tipo": "pagina",
                "identificador": "https://empresa.buk.co/trabaja-con-nosotros"}).json()
     assert r["total"] == 3 and r["error"] is None and r["vacantes"][0]["titulo"] == "Ingeniero mecánico de proyectos"
+
+
+def test_successfactors_sin_xml():
+    from worker.empresas import consultar_successfactors
+
+    html = httpx.Client(transport=httpx.MockTransport(
+        lambda r: httpx.Response(200, text="<html><script>app()</script></html>", headers={"content-type": "text/html"})))
+    with pytest.raises(EmpresaInvalida, match="desactivado el listado XML"):
+        consultar_successfactors(html, {"nombre": "Cotecmar",
+                                        "identificador": "https://career17.sapsf.com/career?company=cotecmarcoP"})
