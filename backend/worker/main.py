@@ -15,6 +15,7 @@ from worker.tareas import actualizacion_diaria
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("worker")
+logging.getLogger("httpx").setLevel(logging.WARNING)  # no registrar URLs (la de Jooble lleva la key)
 
 
 def leer_parametros() -> tuple[str, str]:

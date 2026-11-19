@@ -1,4 +1,5 @@
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -46,8 +47,9 @@ def listar(
     else:
         filtros.append("c.estado <> 'descartada'")
     if buscar:
-        filtros.append("(v.titulo ILIKE :q OR v.empresa ILIKE :q OR v.ubicacion ILIKE :q)")
-        params["q"] = f"%{buscar}%"
+        filtros.append(r"(v.titulo ILIKE :q ESCAPE '\' OR v.empresa ILIKE :q ESCAPE '\' OR v.ubicacion ILIKE :q ESCAPE '\')")
+        escapado = buscar.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        params["q"] = f"%{escapado}%"
     orden_sql = ("c.puntaje DESC NULLS LAST, COALESCE(c.reaparecio_en, c.creada_en) DESC"
                  if orden == "puntaje" else "COALESCE(c.reaparecio_en, c.creada_en) DESC")
     where = " AND ".join(filtros)
@@ -79,10 +81,10 @@ class Cambio(BaseModel):
 
 @router.patch("/coincidencias/{coincidencia_id}")
 def actualizar(
-    coincidencia_id: str, cambio: Cambio,
+    coincidencia_id: UUID, cambio: Cambio,
     usuario: dict = Depends(usuario_actual), sesion: Session = Depends(obtener_sesion),
 ) -> dict:
-    sets, params = [], {"id": coincidencia_id, "u": usuario["id"]}
+    sets, params = [], {"id": str(coincidencia_id), "u": usuario["id"]}
     if cambio.estado:
         sets.append("estado = CAST(:estado AS estado_coincidencia)")
         sets.append("postulada_en = CASE WHEN :estado = 'postulada' THEN now() ELSE postulada_en END")

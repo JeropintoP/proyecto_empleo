@@ -1,5 +1,6 @@
 # HTTPS automatico (Let's Encrypt). DOMINIO viene del .env, ej. proyectoempleo.duckdns.org
 {$DOMINIO} {
     encode gzip
+    header Strict-Transport-Security "max-age=31536000; includeSubDomains"
     reverse_proxy web:80
 }

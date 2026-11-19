@@ -1,6 +1,6 @@
 import tempfile
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
@@ -37,12 +37,15 @@ def ver(usuario: dict = Depends(usuario_actual), sesion: Session = Depends(obten
     return _leer(sesion, usuario["id"])
 
 
+Texto = Annotated[str, Field(max_length=100)]
+
+
 class Preferencias(BaseModel):
-    cargos_objetivo: list[str] | None = Field(None, max_length=15)
-    ciudades: list[str] | None = Field(None, max_length=10)
+    cargos_objetivo: list[Texto] | None = Field(None, max_length=15)
+    ciudades: list[Texto] | None = Field(None, max_length=10)
     modalidad: Literal["presencial", "remoto", "hibrido", "indiferente"] | None = None
     salario_minimo: int | None = Field(None, ge=0)
-    palabras_excluir: list[str] | None = Field(None, max_length=30)
+    palabras_excluir: list[Texto] | None = Field(None, max_length=30)
 
 
 @router.put("/perfil")

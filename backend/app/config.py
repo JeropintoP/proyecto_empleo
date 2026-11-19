@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,7 +10,7 @@ class Config(BaseSettings):
     database_url: str
     zona_horaria: str = "America/Bogota"
 
-    jwt_secreto: str = "solo-desarrollo"
+    jwt_secreto: str                         # obligatorio: openssl rand -hex 32
     jwt_horas: int = 72
 
     ia_proveedor: str = "groq"
@@ -32,6 +33,16 @@ class Config(BaseSettings):
     imap_servidor: str = "imap.gmail.com"
     imap_usuario: str = ""
     imap_clave_aplicacion: str = ""
+
+    @field_validator("jwt_secreto")
+    @classmethod
+    def _secreto_fuerte(cls, v: str) -> str:
+        # Con un secreto debil o el de ejemplo (que esta en el repositorio publico) cualquiera
+        # podria fabricar una sesion valida.
+        if len(v) < 32 or v.startswith("cambiar_por"):
+            raise ValueError("JWT_SECRETO debe ser aleatorio y de al menos 32 caracteres: "
+                             "genere uno con `openssl rand -hex 32` y pongalo en el .env")
+        return v
 
 
 @lru_cache

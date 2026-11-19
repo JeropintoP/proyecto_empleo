@@ -9,4 +9,5 @@ RUN npx ng build --configuration production
 # 2. Servir con Nginx
 FROM nginx:1.27-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY seguridad.conf /etc/nginx/seguridad.conf
 COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html

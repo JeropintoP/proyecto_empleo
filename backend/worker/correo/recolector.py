@@ -10,6 +10,8 @@ Flujo por cada mensaje:
 import hashlib
 import json
 import logging
+import re
+import unicodedata
 from email.message import EmailMessage
 from email.utils import parseaddr
 
@@ -40,13 +42,40 @@ def dias_a_leer(s: Session, fuente_id: int) -> int:
     return int(min(max(dias, DIAS_MIN), DIAS_MAX))
 
 
+def _plano(texto: str | None) -> str:
+    t = unicodedata.normalize("NFKD", (texto or "").lower())
+    return " ".join(re.findall(r"[a-z0-9]+", "".join(c for c in t if not unicodedata.combining(c))))
+
+
+_SOCIEDAD = {"sas", "sa", "ltda", "inc", "bic", "llc", "sl", "cia", "y"}
+
+
+def _empresa(nombre: str | None) -> str:
+    """'Astilleros S.A.S.' y 'ASTILLEROS SAS BIC' -> 'astilleros'."""
+    return " ".join(t for t in _plano((nombre or "").replace(".", "")).split() if t not in _SOCIEDAD)
+
+
 def _huella(v: VacanteExtraida) -> str:
-    base = "|".join((v.titulo or "", v.empresa or "", v.ubicacion or "")).lower()
+    """Identifica la misma oferta publicada en varios portales: cargo + empresa (sin tildes ni signos).
+    Sin empresa no se puede comparar entre portales, asi que se incluye el portal."""
+    empresa = _empresa(v.empresa)
+    base = f"{_plano(v.titulo)}|{empresa}" if empresa else f"{_plano(v.titulo)}||{v.portal}:{v.id_portal}"
     return hashlib.md5(base.encode()).hexdigest()
 
 
+def _ya_la_tiene(s: Session, usuario_id: str, vacante_id, huella: str) -> bool:
+    """El usuario ya tiene esta misma oferta (abierta) llegada por otro portal.
+    Si es asi, la original cuenta como vista hoy (sigue publicada)."""
+    originales = s.execute(text("""SELECT v.id FROM coincidencias c JOIN vacantes v ON v.id = c.vacante_id
+                                     WHERE c.usuario_id = :u AND v.huella = :h AND v.abierta AND v.id <> :v"""),
+                           {"u": usuario_id, "h": huella, "v": vacante_id}).scalars().all()
+    if originales:
+        s.execute(text("UPDATE vacantes SET ultima_vez_vista = now() WHERE id = ANY(:ids)"), {"ids": list(originales)})
+    return bool(originales)
+
+
 def guardar_vacante(s: Session, fuente_id: int, usuario_id: str, v: VacanteExtraida) -> str:
-    """Devuelve 'nueva', 'reprocesada' u 'omitida'."""
+    """Devuelve 'nueva', 'reprocesada', 'omitida' o 'duplicada' (la misma oferta ya le llego por otro portal)."""
     existente = s.execute(
         text("""SELECT id, vacante_reprocesable(id) AS repro
                   FROM vacantes WHERE fuente_id = :f AND id_externo = :e"""),
@@ -69,6 +98,8 @@ def guardar_vacante(s: Session, fuente_id: int, usuario_id: str, v: VacanteExtra
              "fecha": v.fecha_publicacion, "desc": v.descripcion, "huella": _huella(v),
              "datos": json.dumps({"portal": v.portal, **v.extra}, ensure_ascii=False)},
         ).scalar_one()
+        if _ya_la_tiene(s, usuario_id, vacante_id, _huella(v)):
+            return "duplicada"   # se guarda la vacante, pero no se le muestra dos veces ni se evalua de nuevo
         s.execute(
             text("INSERT INTO coincidencias (usuario_id, vacante_id) VALUES (:u, :v) ON CONFLICT DO NOTHING"),
             {"u": usuario_id, "v": vacante_id},
@@ -83,6 +114,10 @@ def guardar_vacante(s: Session, fuente_id: int, usuario_id: str, v: VacanteExtra
     )
 
     # Si el otro usuario aun no la tenia, se le crea su coincidencia
+    tiene = s.execute(text("SELECT EXISTS (SELECT 1 FROM coincidencias WHERE usuario_id = :u AND vacante_id = :v)"),
+                      {"u": usuario_id, "v": vacante_id}).scalar()
+    if not tiene and _ya_la_tiene(s, usuario_id, vacante_id, _huella(v)):
+        return "duplicada"
     creada = s.execute(
         text("""INSERT INTO coincidencias (usuario_id, vacante_id) VALUES (:u, :v)
                 ON CONFLICT DO NOTHING RETURNING id"""),
@@ -108,8 +143,16 @@ def guardar_vacante(s: Session, fuente_id: int, usuario_id: str, v: VacanteExtra
     return "reprocesada"
 
 
+def _suplantado(msg: EmailMessage) -> bool:
+    """Gmail anota en Authentication-Results si el remitente es autentico. Un 'dmarc=fail'
+    indica que alguien uso el nombre del portal sin serlo (posible enlace malicioso)."""
+    return any(re.search(r"\bdmarc=fail\b", str(h), re.I) for h in msg.get_all("Authentication-Results", []) or [])
+
+
 def procesar_mensaje(s: Session, fuente_id: int, msg: EmailMessage, alias: str | None = None) -> dict:
     remitente = str(msg.get("From", ""))
+    if _suplantado(msg):
+        return {"omitido": "remitente no autenticado (DMARC fallido)"}
     lector = lector_para(remitente)
     reenvio_manual = False
     if lector is None:
@@ -132,7 +175,7 @@ def procesar_mensaje(s: Session, fuente_id: int, msg: EmailMessage, alias: str |
         return {"omitido": "reenvio manual desde un correo que no es el del usuario"}
 
     vacantes = lector(msg)
-    conteo = {"nueva": 0, "reprocesada": 0, "omitida": 0}
+    conteo = {"nueva": 0, "reprocesada": 0, "omitida": 0, "duplicada": 0}
     for v in vacantes:
         conteo[guardar_vacante(s, fuente_id, usuario_id, v)] += 1
 

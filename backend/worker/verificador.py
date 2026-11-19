@@ -41,11 +41,17 @@ CABECERAS = {
 }
 
 
+def _solo_publicas(req: httpx.Request) -> None:
+    """Las URL vienen de correos y portales externos: nunca consultar la red interna del servidor."""
+    from worker.empresas import validar_url_publica
+    validar_url_publica(str(req.url))
+
+
 def estado_enlace(cliente: httpx.Client, url: str) -> str:
     """Devuelve 'abierta', 'cerrada' o 'desconocido'."""
     try:
         r = cliente.get(url)
-    except httpx.HTTPError:
+    except Exception:  # error de red o direccion no publica (bloqueada por _solo_publicas)
         return "desconocido"
     if r.status_code in (404, 410):
         return "cerrada"
@@ -74,7 +80,8 @@ def verificar(cliente: httpx.Client | None = None, pausa: float = PAUSA_SEGUNDOS
         ).all()
 
     propio = cliente is None
-    cliente = cliente or httpx.Client(headers=CABECERAS, timeout=20, follow_redirects=True)
+    cliente = cliente or httpx.Client(headers=CABECERAS, timeout=20, follow_redirects=True,
+                                      event_hooks={"request": [_solo_publicas]})
     try:
         for i, (vacante_id, url) in enumerate(pendientes):
             if i and pausa:

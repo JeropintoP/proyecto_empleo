@@ -124,7 +124,7 @@ def evaluar_pendientes(limite: int = 60, lista: list[Proveedor] | None = None) -
                        v.salario_texto, v.descripcion
                   FROM coincidencias c JOIN vacantes v ON v.id = c.vacante_id
                  WHERE c.puntaje IS NULL AND v.abierta
-                 ORDER BY c.creada_en
+                 ORDER BY c.creada_en DESC   -- lo mas reciente primero: si hay atraso, lo viejo espera
                  LIMIT :n
             """),
             {"n": limite},
@@ -132,6 +132,7 @@ def evaluar_pendientes(limite: int = 60, lista: list[Proveedor] | None = None) -
         perfiles = {u: _perfil_para_ia(s, u) for u in {p["usuario_id"] for p in pendientes}}
 
     resultado = {"evaluadas": 0, "excluidas": 0, "errores": 0}
+    seguidos = 0
     for c in pendientes:
         perfil = perfiles[c["usuario_id"]]
         titulo_norm = _normalizar(f'{c["titulo"]} {c["empresa"] or ""}')
@@ -152,10 +153,12 @@ def evaluar_pendientes(limite: int = 60, lista: list[Proveedor] | None = None) -
                     lista)
             except ErrorIA:
                 resultado["errores"] += 1
-                if resultado["errores"] >= 3:  # probablemente cuota agotada: se retoma manana
+                seguidos += 1
+                if seguidos >= 3:  # probablemente cuota agotada: se retoma manana
                     log.warning("Evaluacion detenida tras 3 errores seguidos")
                     break
                 continue
+            seguidos = 0
             resultado["evaluadas"] += 1
 
         puntaje = max(0, min(100, int(evaluacion.get("puntaje") or 0)))

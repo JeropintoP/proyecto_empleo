@@ -9,13 +9,7 @@ router = APIRouter(tags=["salud"])
 
 @router.get("/salud")
 def salud(sesion: Session = Depends(obtener_sesion)) -> dict:
-    """Comprueba que la API responde y que la base de datos esta disponible."""
-    fuentes = sesion.execute(
-        text("""
-            SELECT f.codigo, f.activa, f.horario,
-                   (SELECT e.estado FROM ejecuciones e
-                     WHERE e.fuente_id = f.id ORDER BY e.inicio DESC LIMIT 1) AS ultima
-              FROM fuentes f ORDER BY f.id
-        """)
-    ).mappings().all()
-    return {"estado": "ok", "base_datos": "ok", "fuentes": [dict(f) for f in fuentes]}
+    """Comprueba que la API responde y que la base de datos esta disponible.
+    Es publica: no expone fuentes ni errores (eso esta en /api/actualizar, con sesion)."""
+    sesion.execute(text("SELECT 1"))
+    return {"estado": "ok", "base_datos": "ok"}
