@@ -1,4 +1,4 @@
-"""Recolectores por API: Jooble, Careerjet y Get on Board.
+"""Recolectores por API: Jooble, Careerjet, Get on Board, Himalayas y Jobicy.
 
 Cada corrida toma, por fuente, las N busquedas activas que hace mas tiempo no se consultan
 (N = parametro consultas_diarias_<fuente>) y guarda las vacantes con la misma logica del
@@ -163,14 +163,14 @@ def consultar_careerjet(cliente: httpx.Client, palabras: str, ubicacion: str) ->
 # ---------------------------------------------------------------------
 # Orquestacion comun
 # ---------------------------------------------------------------------
-def _recolectar(codigo: str, consultar: Callable, cliente: httpx.Client | None) -> dict:
+def _recolectar(codigo: str, consultar: Callable, cliente: httpx.Client | None, en_ingles: bool = False) -> dict:
     total = {"consultas": 0, "leidas": 0, "nuevas": 0, "reprocesadas": 0}
     with sesion_transaccion() as s:
         fuente_id = s.execute(text("SELECT id FROM fuentes WHERE codigo = :c"), {"c": codigo}).scalar_one()
         cupo = int(s.execute(text("SELECT valor FROM parametros WHERE clave = :c"),
                              {"c": f"consultas_diarias_{codigo}"}).scalar() or 4)
         busquedas = s.execute(
-            text("""SELECT b.id, b.palabras_clave, b.ubicacion, p.usuario_id
+            text("""SELECT b.id, b.palabras_clave, b.palabras_clave_en, b.ubicacion, p.usuario_id
                       FROM busquedas b JOIN perfiles p ON p.id = b.perfil_id
                       JOIN usuarios u ON u.id = p.usuario_id AND u.activo
                      WHERE b.fuente_id = :f AND b.activa
@@ -183,7 +183,8 @@ def _recolectar(codigo: str, consultar: Callable, cliente: httpx.Client | None) 
     cliente = cliente or httpx.Client(timeout=30, headers={"User-Agent": AGENTE})
     try:
         for b in busquedas:
-            vacantes = consultar(cliente, b.palabras_clave, b.ubicacion or "Colombia")
+            palabras = (b.palabras_clave_en or b.palabras_clave) if en_ingles else b.palabras_clave
+            vacantes = consultar(cliente, palabras, b.ubicacion or "Colombia")
             total["consultas"] += 1
             with sesion_transaccion() as s:
                 for v in vacantes:
@@ -240,6 +241,144 @@ def consultar_getonbrd(cliente: httpx.Client, palabras: str, ubicacion: str) -> 
 
 def recolectar_getonbrd(cliente: httpx.Client | None = None) -> dict:
     return _recolectar("getonbrd", consultar_getonbrd, cliente)
+
+
+# ---------------------------------------------------------------------
+# Salarios internacionales: texto legible; cifra solo si viene en pesos
+# ---------------------------------------------------------------------
+_PERIODO = {"annual": "Y", "yearly": "Y", "monthly": "M", "weekly": "W", "fortnightly": "W",
+            "daily": "D", "hourly": "H"}
+_PERIODO_TEXTO = {"Y": "anual", "M": "mensual", "W": "semanal", "D": "diario", "H": "por hora"}
+
+
+def _salario_texto(minimo, maximo, moneda: str | None, tipo: str) -> str | None:
+    minimo, maximo = _entero(minimo), _entero(maximo)
+    if not (minimo or maximo):
+        return None
+    rango = f"{minimo:,}–{maximo:,}" if minimo and maximo else f"{(minimo or maximo):,}"
+    return f"{(moneda or 'USD').upper()} {rango.replace(',', '.')} ({_PERIODO_TEXTO.get(tipo, 'anual')})"
+
+
+# ---------------------------------------------------------------------
+# Himalayas: GET https://himalayas.app/jobs/api/search?q=...&country=CO  (publica, sin key)
+# Terminos: postular siempre por applicationLink y dar credito visible a Himalayas.
+# ---------------------------------------------------------------------
+def consultar_himalayas(cliente: httpx.Client, palabras: str, ubicacion: str) -> list[VacanteExtraida]:
+    r = cliente.get("https://himalayas.app/jobs/api/search",
+                    params={"q": palabras, "country": "CO", "sort": "recent", "page": 1})
+    _revisar_respuesta(r, "Himalayas")
+    vacantes = []
+    for j in r.json().get("jobs") or []:
+        url = j.get("applicationLink")
+        if not j.get("title") or not url:
+            continue
+        paises = [p.get("name") if isinstance(p, dict) else str(p) for p in j.get("locationRestrictions") or []]
+        tipo = _PERIODO.get((j.get("salaryPeriod") or "annual").lower(), "Y")
+        publicado = j.get("pubDate")
+        vacantes.append(VacanteExtraida(
+            portal="himalayas", id_portal=str(j.get("guid") or hashlib.md5(url.encode()).hexdigest()),
+            titulo=_limpiar(j["title"]), url=url, empresa=_limpiar(j.get("companyName")),
+            ubicacion=("Remoto: " + ", ".join(filter(None, paises))) if paises else "Remoto (mundial)",
+            modalidad="remoto",
+            salario_texto=_salario_texto(j.get("minSalary"), j.get("maxSalary"), j.get("currency"), tipo),
+            salario_min=_salario_mensual_cop(j.get("minSalary"), j.get("currency"), tipo),
+            salario_max=_salario_mensual_cop(j.get("maxSalary"), j.get("currency"), tipo),
+            fecha_publicacion=datetime.fromtimestamp(publicado, tz=timezone.utc) if isinstance(publicado, (int, float)) else None,
+            descripcion=(_limpiar(j.get("excerpt")) or _limpiar(j.get("description")) or "")[:3000] or None,
+        ))
+    return vacantes
+
+
+def recolectar_himalayas(cliente: httpx.Client | None = None) -> dict:
+    from app.ia.servicios import completar_ingles
+    completar_ingles()
+    return _recolectar("himalayas", consultar_himalayas, cliente, en_ingles=True)
+
+
+# ---------------------------------------------------------------------
+# Jobicy: GET https://jobicy.com/api/v2/remote-jobs?geo=latam  (publica, sin key)
+# Terminos: no consultar mas de una vez por hora. Por eso se hace UNA consulta por corrida
+# (remotos para Latinoamerica) y se filtra localmente con las busquedas en ingles de cada usuario.
+# ---------------------------------------------------------------------
+_PALABRAS_VACIAS = {"de", "del", "la", "el", "en", "y", "a", "of", "the", "and", "in", "for", "jr", "sr"}
+
+
+def _terminos(texto: str) -> list[str]:
+    return [t for t in re.findall(r"[a-z0-9+#]+", _limpiar(texto).lower() if texto else "")
+            if t not in _PALABRAS_VACIAS and len(t) > 1]
+
+
+def coincide(busqueda: str, titulo: str, extracto: str | None) -> bool:
+    """Todos los terminos de la busqueda aparecen en el titulo, o en el titulo + extracto."""
+    terminos = _terminos(busqueda)
+    if not terminos:
+        return False
+    en_titulo = set(_terminos(titulo))
+    if all(t in en_titulo for t in terminos):
+        return True
+    en_todo = en_titulo | set(_terminos(extracto or ""))
+    return len(terminos) > 1 and all(t in en_todo for t in terminos) and terminos[-1] in en_titulo
+
+
+def recolectar_jobicy(cliente: httpx.Client | None = None) -> dict:
+    from app.ia.servicios import completar_ingles
+
+    total = {"consultas": 0, "leidas": 0, "nuevas": 0, "reprocesadas": 0}
+    with sesion_transaccion() as s:
+        fuente_id = s.execute(text("SELECT id FROM fuentes WHERE codigo = 'jobicy'")).scalar_one()
+        reciente = s.execute(text("""SELECT EXISTS (SELECT 1 FROM ejecuciones WHERE fuente_id = :f
+                                       AND estado = 'ok' AND inicio > now() - interval '60 minutes')"""),
+                             {"f": fuente_id}).scalar()
+    if reciente:  # respeta el limite de Jobicy aunque se presione "Actualizar ahora"
+        log.info("Jobicy consultado hace menos de una hora; se omite")
+        return {**total, "omitida": "consultada hace menos de una hora"}
+
+    completar_ingles()
+    with sesion_transaccion() as s:
+        busquedas = s.execute(text("""
+            SELECT DISTINCT p.usuario_id, COALESCE(b.palabras_clave_en, b.palabras_clave) AS termino
+              FROM busquedas b JOIN perfiles p ON p.id = b.perfil_id
+              JOIN usuarios u ON u.id = p.usuario_id AND u.activo
+             WHERE b.fuente_id = :f AND b.activa"""), {"f": fuente_id}).all()
+    if not busquedas:
+        return total
+
+    propio = cliente is None
+    cliente = cliente or httpx.Client(timeout=30, headers={"User-Agent": AGENTE})
+    try:
+        r = cliente.get("https://jobicy.com/api/v2/remote-jobs", params={"geo": "latam", "count": 100})
+        _revisar_respuesta(r, "Jobicy")
+        trabajos = r.json().get("jobs") or []
+    finally:
+        if propio:
+            cliente.close()
+    total["consultas"], total["leidas"] = 1, len(trabajos)
+
+    with sesion_transaccion() as s:
+        for j in trabajos:
+            if not j.get("jobTitle") or not j.get("url"):
+                continue
+            usuarios = {b.usuario_id for b in busquedas if coincide(b.termino, j["jobTitle"], j.get("jobExcerpt"))}
+            if not usuarios:
+                continue
+            tipo = _PERIODO.get((j.get("salaryPeriod") or "yearly").lower(), "Y")
+            v = VacanteExtraida(
+                portal="jobicy", id_portal=str(j.get("id") or j.get("jobSlug")), titulo=_limpiar(j["jobTitle"]),
+                url=j["url"], empresa=_limpiar(j.get("companyName")),
+                ubicacion=f"Remoto: {j.get('jobGeo') or 'LATAM'}", modalidad="remoto",
+                salario_texto=_salario_texto(j.get("salaryMin"), j.get("salaryMax"), j.get("salaryCurrency"), tipo),
+                salario_min=_salario_mensual_cop(j.get("salaryMin"), j.get("salaryCurrency"), tipo),
+                salario_max=_salario_mensual_cop(j.get("salaryMax"), j.get("salaryCurrency"), tipo),
+                fecha_publicacion=_fecha(j.get("pubDate")),
+                descripcion=(_limpiar(j.get("jobExcerpt")) or _limpiar(j.get("jobDescription")) or "")[:3000] or None,
+            )
+            for usuario_id in usuarios:
+                resultado = guardar_vacante(s, fuente_id, usuario_id, v)
+                if resultado == "nueva":
+                    total["nuevas"] += 1
+                elif resultado == "reprocesada":
+                    total["reprocesadas"] += 1
+    return total
 
 
 def recolectar_jooble(cliente: httpx.Client | None = None) -> dict:

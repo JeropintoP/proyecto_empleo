@@ -79,12 +79,37 @@ def generar_busquedas(usuario_id: str, lista: list[Proveedor] | None = None) -> 
         for fuente_id in fuentes:
             for b in busquedas:
                 s.execute(
-                    text("""INSERT INTO busquedas (perfil_id, fuente_id, palabras_clave, ubicacion)
-                            VALUES (:p, :f, :k, :u)"""),
+                    text("""INSERT INTO busquedas (perfil_id, fuente_id, palabras_clave, palabras_clave_en, ubicacion)
+                            VALUES (:p, :f, :k, :en, :u)"""),
                     {"p": perfil_id, "f": fuente_id, "k": b["palabras_clave"][:200],
+                     "en": (b.get("palabras_clave_en") or "")[:200] or None,
                      "u": (b.get("ubicacion") or "Colombia")[:120]},
                 )
     return busquedas
+
+
+def completar_ingles(lista: list[Proveedor] | None = None) -> int:
+    """Agrega la version en ingles a las busquedas que no la tienen (una sola consulta a la IA).
+    Si la IA no esta disponible, usa el texto en espanol para no bloquear la recolección."""
+    with sesion_transaccion() as s:
+        faltantes = s.execute(text(
+            "SELECT DISTINCT palabras_clave FROM busquedas WHERE palabras_clave_en IS NULL AND activa LIMIT 30"
+        )).scalars().all()
+    if not faltantes:
+        return 0
+    try:
+        respuesta, _ = consultar("traducir_busquedas", prompts.TRADUCIR_BUSQUEDAS,
+                                 json.dumps(faltantes, ensure_ascii=False), lista)
+        traducciones = {t.get("es"): t.get("en") for t in respuesta.get("traducciones", []) if t.get("en")}
+    except ErrorIA as exc:
+        log.warning("No se pudieron traducir las busquedas: %s", exc)
+        traducciones = {}
+    with sesion_transaccion() as s:
+        for es in faltantes:
+            s.execute(text("UPDATE busquedas SET palabras_clave_en = :en WHERE palabras_clave = :es "
+                           "AND palabras_clave_en IS NULL"),
+                      {"en": (traducciones.get(es) or es)[:200], "es": es})
+    return len(faltantes)
 
 
 # ---------------------------------------------------------------------

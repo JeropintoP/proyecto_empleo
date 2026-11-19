@@ -128,6 +128,9 @@
             }
           </div>
           <p class="sutil pie">
+            @if (sitioPortal(c.portal); as sitio) {
+              Fuente: <a [href]="sitio" target="_blank" rel="noopener">{{ portal(c.portal) }}</a> ·
+            }
             Recibida {{ c.creada_en | date: "d MMM" }}
             @if (c.postulada_en) { · Postulado {{ c.postulada_en | date: "d MMM" }} }
             @if (!c.abierta) { · La oferta parece cerrada }

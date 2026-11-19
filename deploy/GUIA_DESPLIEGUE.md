@@ -144,6 +144,7 @@ aplíquelo a la base existente (los scripts son seguros de repetir):
 docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/002_notificaciones.sql
 docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/003_fuentes_api.sql
 docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/004_getonbrd.sql
+docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/005_himalayas_jobicy.sql
 ```
 
 ## Activar Jooble y Careerjet (cuando lleguen las keys)

@@ -16,6 +16,18 @@ const PESTANAS: { valor: Estado | ''; etiqueta: string }[] = [
 ];
 const TAMANO = 30;
 
+// Nombre y sitio de cada fuente. Himalayas y Jobicy exigen credito visible con enlace.
+const PORTALES: Record<string, { nombre: string; sitio: string }> = {
+  linkedin: { nombre: 'LinkedIn', sitio: 'https://www.linkedin.com/jobs/' },
+  computrabajo: { nombre: 'Computrabajo', sitio: 'https://co.computrabajo.com/' },
+  elempleo: { nombre: 'Elempleo', sitio: 'https://www.elempleo.com/' },
+  getonbrd: { nombre: 'Get on Board', sitio: 'https://www.getonbrd.com/' },
+  jooble: { nombre: 'Jooble', sitio: 'https://co.jooble.org/' },
+  careerjet: { nombre: 'Careerjet', sitio: 'https://www.careerjet.com.co/' },
+  himalayas: { nombre: 'Himalayas', sitio: 'https://himalayas.app/' },
+  jobicy: { nombre: 'Jobicy', sitio: 'https://jobicy.com/' },
+};
+
 @Component({
   selector: 'app-tablero',
   imports: [FormsModule, DatePipe, DecimalPipe],
@@ -169,10 +181,11 @@ export class Tablero implements OnInit, OnDestroy {
   }
 
   portal(p: string | null): string {
-    return ({
-      linkedin: 'LinkedIn', computrabajo: 'Computrabajo', elempleo: 'Elempleo',
-      getonbrd: 'Get on Board', jooble: 'Jooble', careerjet: 'Careerjet',
-    } as Record<string, string>)[p ?? ''] ?? p ?? '';
+    return PORTALES[p ?? '']?.nombre ?? p ?? '';
+  }
+
+  sitioPortal(p: string | null): string | null {
+    return PORTALES[p ?? '']?.sitio ?? null;
   }
 
   nivel(p: number | null): string {

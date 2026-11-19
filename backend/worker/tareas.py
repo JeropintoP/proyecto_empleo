@@ -13,14 +13,18 @@ from app.ia.proveedor import ErrorIA
 from app.ia.servicios import evaluar_pendientes
 from worker.correo.recolector import recolectar as recolectar_correo
 from worker.notificar import enviar_resumenes
-from worker.recolectores_api import recolectar_careerjet, recolectar_getonbrd, recolectar_jooble
+from worker.recolectores_api import (recolectar_careerjet, recolectar_getonbrd, recolectar_himalayas,
+                                     recolectar_jobicy, recolectar_jooble)
 from worker.verificador import verificar
 
 log = logging.getLogger("worker")
 
 # codigo de fuente -> funcion recolectora
-# Get on Board es publica: siempre activa. Jooble y Careerjet solo si hay key.
-RECOLECTORES: dict[str, Callable[[], dict]] = {"correo": recolectar_correo, "getonbrd": recolectar_getonbrd}
+# Get on Board, Himalayas y Jobicy son publicas: siempre activas. Jooble y Careerjet solo si hay key.
+RECOLECTORES: dict[str, Callable[[], dict]] = {
+    "correo": recolectar_correo, "getonbrd": recolectar_getonbrd,
+    "himalayas": recolectar_himalayas, "jobicy": recolectar_jobicy,
+}
 if config().jooble_api_key:
     RECOLECTORES["jooble"] = recolectar_jooble
 if config().careerjet_api_key:

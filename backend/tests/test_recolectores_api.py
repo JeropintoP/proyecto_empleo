@@ -161,7 +161,7 @@ def test_registro_condicional(monkeypatch):
     monkeypatch.setattr(config(), "jooble_api_key", "")
     monkeypatch.setattr(config(), "careerjet_api_key", "x")
     importlib.reload(tareas)
-    assert set(tareas.RECOLECTORES) == {"correo", "getonbrd", "careerjet"}
+    assert set(tareas.RECOLECTORES) == {"correo", "getonbrd", "himalayas", "jobicy", "careerjet"}
 
 
 GETONBRD = {"data": [
@@ -203,3 +203,106 @@ def test_getonbrd_sin_key(entorno):
         assert v["descripcion"] == "SQL y Power BI Modelar datos"
         h = s.execute(text("SELECT modalidad::text, salario_texto FROM vacantes WHERE id_externo = 'getonbrd:dba-hibrido'")).one()
         assert h == ("hibrido", None)
+
+
+# ----------------------------- Himalayas / Jobicy -----------------------------
+HIMALAYAS = {"totalCount": 1, "jobs": [
+    {"title": "Data Analyst", "companyName": "Remote Co", "excerpt": "SQL and dashboards",
+     "description": "<p>Full</p>", "locationRestrictions": [{"alpha2": "CO", "name": "Colombia", "slug": "colombia"}],
+     "minSalary": 30000, "maxSalary": 42000, "currency": "USD", "salaryPeriod": "annual",
+     "pubDate": 1795000000, "applicationLink": "https://himalayas.app/companies/remote-co/jobs/data-analyst",
+     "guid": "himalayas-123"},
+]}
+
+JOBICY = {"jobs": [
+    {"id": 501, "url": "https://jobicy.com/jobs/501-senior-data-analyst", "jobTitle": "Senior Data Analyst",
+     "companyName": "LatAm Data", "jobGeo": "LATAM", "jobExcerpt": "Power BI, SQL", "pubDate": "2026-11-18T10:00:00+00:00",
+     "salaryMin": 2000, "salaryMax": 3000, "salaryCurrency": "USD", "salaryPeriod": "monthly"},
+    {"id": 502, "url": "https://jobicy.com/jobs/502-graphic-designer", "jobTitle": "Graphic Designer",
+     "companyName": "Studio", "jobGeo": "LATAM", "jobExcerpt": "Figma"},
+    {"id": 503, "url": "https://jobicy.com/jobs/503-integration-engineer", "jobTitle": "Integration Engineer (APIs)",
+     "companyName": "Conectar", "jobGeo": "Anywhere", "jobExcerpt": "REST, Python"},
+]}
+
+
+def _con_ingles():
+    from app.db import sesion_transaccion
+    with sesion_transaccion() as s:
+        for codigo in ("himalayas", "jobicy"):
+            s.execute(text("""INSERT INTO busquedas (perfil_id, fuente_id, palabras_clave, ubicacion)
+                              SELECT perfil_id, (SELECT id FROM fuentes WHERE codigo = :c), palabras_clave, ubicacion
+                                FROM busquedas WHERE fuente_id = (SELECT id FROM fuentes WHERE codigo='jooble')"""),
+                      {"c": codigo})
+        traduccion = {"DBA": "database administrator", "analista de datos": "data analyst",
+                      "ingeniero de integracion": "integration engineer"}
+        for es, en in traduccion.items():
+            s.execute(text("UPDATE busquedas SET palabras_clave_en = :en WHERE palabras_clave = :es"), {"en": en, "es": es})
+
+
+def test_himalayas_en_ingles_y_atribucion(entorno):
+    from app.db import sesion_transaccion
+    from worker.recolectores_api import recolectar_himalayas
+
+    _con_ingles()
+    peticiones = []
+    r = recolectar_himalayas(transporte(peticiones, {"himalayas.app": (200, HIMALAYAS)}))
+    assert r["consultas"] == 3 and r["nuevas"] == 1
+    p = peticiones[0]
+    assert p.url.path == "/jobs/api/search" and p.url.params["country"] == "CO"
+    assert {q.url.params["q"] for q in peticiones} == {"database administrator", "data analyst", "integration engineer"}
+    with sesion_transaccion() as s:
+        v = s.execute(text("SELECT * FROM vacantes WHERE id_externo = 'himalayas:himalayas-123'")).mappings().one()
+        assert v["url"] == HIMALAYAS["jobs"][0]["applicationLink"]          # terminos: postular por applicationLink
+        assert (v["ubicacion"], v["modalidad"]) == ("Remoto: Colombia", "remoto")
+        assert v["salario_texto"] == "USD 30.000–42.000 (anual)" and v["salario_min"] is None
+
+
+def test_jobicy_una_consulta_y_filtro_local(entorno):
+    from app.db import sesion_transaccion
+    from worker.recolectores_api import recolectar_jobicy
+
+    _con_ingles()
+    peticiones = []
+    r = recolectar_jobicy(transporte(peticiones, {"jobicy.com": (200, JOBICY)}))
+    assert len(peticiones) == 1                                           # una sola consulta por corrida
+    assert peticiones[0].url.params["geo"] == "latam"
+    assert (r["leidas"], r["nuevas"]) == (3, 2)                           # el disenador no coincide
+    with sesion_transaccion() as s:
+        titulos = set(s.execute(text("SELECT titulo FROM vacantes")).scalars())
+        assert titulos == {"Senior Data Analyst", "Integration Engineer (APIs)"}
+        sal = s.execute(text("SELECT salario_texto FROM vacantes WHERE titulo = 'Senior Data Analyst'")).scalar()
+        assert sal == "USD 2.000–3.000 (mensual)"
+        s.execute(text("""INSERT INTO ejecuciones (fuente_id, estado, inicio, fin)
+                          SELECT id, 'ok', now() - interval '10 minutes', now() FROM fuentes WHERE codigo='jobicy'"""))
+    # Menos de una hora despues: no vuelve a consultar
+    peticiones.clear()
+    assert "omitida" in recolectar_jobicy(transporte(peticiones, {"jobicy.com": (200, JOBICY)}))
+    assert peticiones == []
+
+
+def test_coincidencia_de_terminos():
+    from worker.recolectores_api import coincide
+    assert coincide("data analyst", "Senior Data Analyst", None)
+    assert coincide("data analyst", "Analyst II", "work with data pipelines")       # termino final en el titulo
+    assert not coincide("data analyst", "Data Engineer", "analyst support")        # el cargo es otro
+    assert not coincide("database administrator", "Graphic Designer", "admin of databases")
+    assert coincide("IT support", "IT Support Specialist", None)
+
+
+def test_completar_ingles(entorno):
+    from app.db import sesion_transaccion
+    from app.ia.servicios import completar_ingles
+
+    class Traductor:
+        nombre, modelo = "falso", "m"
+
+        def completar_json(self, sistema, usuario):
+            return {"traducciones": [{"es": "DBA", "en": "database administrator"},
+                                     {"es": "analista de datos", "en": "data analyst"}]}, {}
+
+    assert completar_ingles(lista=[Traductor()]) == 3
+    with sesion_transaccion() as s:
+        en = dict(s.execute(text("SELECT DISTINCT palabras_clave, palabras_clave_en FROM busquedas")).all())
+    assert en["DBA"] == "database administrator" and en["analista de datos"] == "data analyst"
+    assert en["ingeniero de integracion"] == "ingeniero de integracion"   # sin traduccion: queda el original
+    assert completar_ingles(lista=[Traductor()]) == 0                     # ya no hay faltantes
