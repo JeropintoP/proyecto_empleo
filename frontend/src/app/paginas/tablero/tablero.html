@@ -14,7 +14,23 @@
       </p>
     }
   </div>
+  <button class="actualizar" [disabled]="actualizando()" (click)="actualizarAhora()">
+    {{ actualizando() ? "Actualizando…" : "Actualizar ahora" }}
+  </button>
 </section>
+
+@if (actualizacion(); as a) {
+  <div class="fuentes">
+    @for (f of a.fuentes; track f.codigo) {
+      <span class="fuente" [attr.data-estado]="f.configurada ? f.estado : 'apagada'" [title]="f.error || ''">
+        {{ f.nombre }}: {{ textoFuente(f) }}
+      </span>
+    }
+  </div>
+}
+@if (avisoActualizacion()) {
+  <p class="aviso">{{ avisoActualizacion() }}</p>
+}
 
 <nav class="pestanas" aria-label="Estado">
   @for (p of pestanas; track p.valor) {

@@ -7,14 +7,14 @@ from collections.abc import Callable
 
 from sqlalchemy import text
 
-from app.db import sesion_transaccion
+from app.config import config
+from app.db import motor, sesion_transaccion
 from app.ia.proveedor import ErrorIA
 from app.ia.servicios import evaluar_pendientes
-from worker.notificar import enviar_resumenes
-from worker.verificador import verificar
-from app.config import config
 from worker.correo.recolector import recolectar as recolectar_correo
+from worker.notificar import enviar_resumenes
 from worker.recolectores_api import recolectar_careerjet, recolectar_jooble
+from worker.verificador import verificar
 
 log = logging.getLogger("worker")
 
@@ -26,7 +26,34 @@ if config().careerjet_api_key:
     RECOLECTORES["careerjet"] = recolectar_careerjet
 
 
-def actualizacion_diaria() -> None:
+# Bloqueo en PostgreSQL: garantiza una sola actualizacion a la vez, aunque la pidan
+# el worker (6 a.m.) y la API (boton "Actualizar ahora") desde contenedores distintos.
+LLAVE_BLOQUEO = 7_315_001
+
+
+def actualizacion_diaria(enviar_resumen: bool = True) -> bool:
+    """Ejecuta la actualizacion completa. Devuelve False si ya habia otra en curso."""
+    with motor.connect() as conexion:
+        if not conexion.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": LLAVE_BLOQUEO}).scalar():
+            log.info("Ya hay una actualizacion en curso; se omite esta")
+            return False
+        try:
+            _ejecutar(enviar_resumen)
+        finally:
+            conexion.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": LLAVE_BLOQUEO})
+            conexion.commit()
+    return True
+
+
+def actualizacion_en_curso() -> bool:
+    with sesion_transaccion() as s:
+        return s.execute(
+            text("SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND objid = :k)"),
+            {"k": LLAVE_BLOQUEO},
+        ).scalar()
+
+
+def _ejecutar(enviar_resumen: bool) -> None:
     with sesion_transaccion() as s:
         fuentes = s.execute(
             text("SELECT id, codigo FROM fuentes WHERE activa ORDER BY id")
@@ -74,7 +101,8 @@ def actualizacion_diaria() -> None:
 
     _paso("Verificacion de vacantes cerradas", verificar)
     _paso("Evaluacion IA", evaluar_pendientes)   # puntaje para nuevas o reprocesadas sin evaluar
-    _paso("Resumen por correo", enviar_resumenes)
+    if enviar_resumen:  # en una actualizacion manual el usuario ya esta mirando el tablero
+        _paso("Resumen por correo", enviar_resumenes)
 
 
 def _paso(nombre: str, funcion: Callable[[], dict]) -> None:

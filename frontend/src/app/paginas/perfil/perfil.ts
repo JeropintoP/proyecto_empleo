@@ -24,6 +24,13 @@ export class Perfil implements OnInit {
   readonly aviso = signal('');
   readonly subiendo = signal(false);
   readonly guardando = signal(false);
+  readonly cambiandoClave = signal(false);
+  readonly errorClave = signal('');
+  readonly avisoClave = signal('');
+
+  claveActual = '';
+  claveNueva = '';
+  claveConfirmacion = '';
 
   // Formulario de preferencias
   cargos = '';
@@ -87,6 +94,29 @@ export class Perfil implements OnInit {
       this.error.set(mensajeError(e));
     } finally {
       this.guardando.set(false);
+    }
+  }
+
+  async cambiarClave(): Promise<void> {
+    this.errorClave.set('');
+    this.avisoClave.set('');
+    if (this.claveNueva.length < 10) {
+      this.errorClave.set('La clave nueva debe tener al menos 10 caracteres.');
+      return;
+    }
+    if (this.claveNueva !== this.claveConfirmacion) {
+      this.errorClave.set('La confirmación no coincide con la clave nueva.');
+      return;
+    }
+    this.cambiandoClave.set(true);
+    try {
+      await firstValueFrom(this.api.cambiarClave(this.claveActual, this.claveNueva));
+      this.claveActual = this.claveNueva = this.claveConfirmacion = '';
+      this.avisoClave.set('Clave actualizada.');
+    } catch (e) {
+      this.errorClave.set(mensajeError(e));
+    } finally {
+      this.cambiandoClave.set(false);
     }
   }
 }

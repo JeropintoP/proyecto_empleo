@@ -1,10 +1,10 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
 import { Api } from '../../nucleo/api';
-import { Coincidencia, Estado, FiltrosTablero, Resumen } from '../../nucleo/modelos';
+import { Coincidencia, Estado, EstadoActualizacion, FiltrosTablero, Resumen } from '../../nucleo/modelos';
 import { mensajeError } from '../../nucleo/sesion';
 
 const PESTANAS: { valor: Estado | ''; etiqueta: string }[] = [
@@ -22,7 +22,7 @@ const TAMANO = 30;
   templateUrl: './tablero.html',
   styleUrl: './tablero.css',
 })
-export class Tablero implements OnInit {
+export class Tablero implements OnInit, OnDestroy {
   private readonly api = inject(Api);
 
   readonly pestanas = PESTANAS;
@@ -34,11 +34,63 @@ export class Tablero implements OnInit {
   readonly error = signal('');
   readonly abierta = signal<string | null>(null);
   readonly hayMas = computed(() => this.items().length < this.total());
+  readonly actualizacion = signal<EstadoActualizacion | null>(null);
+  readonly avisoActualizacion = signal('');
+  readonly actualizando = computed(() => this.actualizacion()?.en_curso ?? false);
+
+  private sondeo?: ReturnType<typeof setInterval>;
 
   private temporizador?: ReturnType<typeof setTimeout>;
 
   ngOnInit(): void {
     this.cargar();
+    this.consultarActualizacion();
+  }
+
+  ngOnDestroy(): void {
+    clearInterval(this.sondeo);
+  }
+
+  async consultarActualizacion(): Promise<void> {
+    try {
+      const estado = await firstValueFrom(this.api.estadoActualizacion());
+      const termino = this.actualizando() && !estado.en_curso;
+      this.actualizacion.set(estado);
+      if (estado.en_curso) this.iniciarSondeo();
+      if (termino) {
+        clearInterval(this.sondeo);
+        this.sondeo = undefined;
+        const nuevas = estado.fuentes.reduce((s, f) => s + (f.vacantes_nuevas ?? 0), 0);
+        this.avisoActualizacion.set(nuevas === 0 ? 'Actualización terminada: no hay vacantes nuevas.'
+          : `Actualización terminada: ${nuevas} ${nuevas === 1 ? 'vacante nueva' : 'vacantes nuevas'}.`);
+        this.cargar();
+      }
+    } catch {
+      /* el estado es informativo: si falla, el tablero sigue funcionando */
+    }
+  }
+
+  async actualizarAhora(): Promise<void> {
+    this.avisoActualizacion.set('');
+    this.error.set('');
+    try {
+      this.actualizacion.set(await firstValueFrom(this.api.actualizarAhora()));
+      this.iniciarSondeo();
+    } catch (e) {
+      this.error.set(mensajeError(e));
+    }
+  }
+
+  private iniciarSondeo(): void {
+    this.sondeo ??= setInterval(() => this.consultarActualizacion(), 4000);
+  }
+
+  textoFuente(f: { estado: string | null; configurada: boolean; vacantes_nuevas: number | null; error: string | null }): string {
+    if (!f.configurada) return 'sin configurar';
+    if (f.estado === 'en_curso') return 'actualizando…';
+    if (f.estado === 'error') return 'con error';
+    if (f.estado === 'ok') return f.vacantes_nuevas === 1 ? '1 nueva' : `${f.vacantes_nuevas ?? 0} nuevas`;
+    return 'sin datos';
   }
 
   conteo(estado: Estado | ''): number | null {

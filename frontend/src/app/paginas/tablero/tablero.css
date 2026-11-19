@@ -1,4 +1,14 @@
+.cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .cabecera h1 { margin: 0 0 4px; }
+.cabecera p { margin: 0; }
+.actualizar { white-space: nowrap; }
+
+.fuentes { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; }
+.fuente { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--fondo-2); color: var(--sutil); }
+.fuente[data-estado="ok"] { background: var(--alto-fondo); color: var(--alto); }
+.fuente[data-estado="error"] { background: #fde8e6; color: var(--peligro); cursor: help; }
+.fuente[data-estado="en_curso"] { background: var(--acento-fondo); color: var(--acento); }
+.aviso { margin-top: 12px; }
 
 .pestanas { display: flex; gap: 4px; margin: 20px 0 12px; overflow-x: auto; border-bottom: 1px solid var(--linea); }
 .pestanas button {

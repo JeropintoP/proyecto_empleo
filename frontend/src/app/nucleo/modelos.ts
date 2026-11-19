@@ -58,3 +58,18 @@ export interface FiltrosTablero {
   buscar?: string;
   orden?: 'puntaje' | 'fecha';
 }
+
+export interface EstadoFuente {
+  codigo: string;
+  nombre: string;
+  estado: 'en_curso' | 'ok' | 'error' | null;
+  fin: string | null;
+  vacantes_nuevas: number | null;
+  error: string | null;
+  configurada: boolean;
+}
+
+export interface EstadoActualizacion {
+  en_curso: boolean;
+  fuentes: EstadoFuente[];
+}

@@ -110,6 +110,22 @@ function crearDatos(): { vacantes: Coincidencia[]; perfil: Perfil } {
 }
 
 let datos: ReturnType<typeof crearDatos> | null = null;
+let actualizacionHasta = 0;   // simula una actualizacion de ~6 segundos
+let nuevasUltima = 0;
+
+function estadoActualizacion() {
+  const enCurso = Date.now() < actualizacionHasta;
+  const fin = new Date(enCurso ? Date.now() - 86_400_000 : actualizacionHasta || Date.now() - 3_600_000).toISOString();
+  return {
+    en_curso: enCurso,
+    fuentes: [
+      { codigo: 'jooble', nombre: 'Jooble', estado: null, fin: null, vacantes_nuevas: null, error: null, configurada: false },
+      { codigo: 'careerjet', nombre: 'Careerjet', estado: null, fin: null, vacantes_nuevas: null, error: null, configurada: false },
+      { codigo: 'correo', nombre: 'Alertas por correo', estado: enCurso ? 'en_curso' : 'ok', fin,
+        vacantes_nuevas: enCurso ? null : nuevasUltima, error: null, configurada: true },
+    ],
+  };
+}
 
 const responder = <T>(cuerpo: T, ms = 250) => of(new HttpResponse({ status: 200, body: cuerpo })).pipe(delay(ms));
 const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -157,6 +173,26 @@ export const interceptorDemo: HttpInterceptorFn = (req, next) => {
     }
     if (body.notas !== undefined) v.notas = body.notas;
     return responder({ estado: v.estado, notas: v.notas }, 150);
+  }
+
+  if (url.endsWith('/api/yo/clave')) {
+    return responder(null, 400);
+  }
+
+  if (url.endsWith('/api/actualizar')) {
+    if (req.method === 'POST' && Date.now() >= actualizacionHasta) {
+      actualizacionHasta = Date.now() + 6000;
+      nuevasUltima = 1;
+      setTimeout(() => {
+        VACANTES.unshift(vacante(20 + VACANTES.length, 86, 'Ingeniero de Datos Junior', 'Puerto Digital S.A.S.',
+          'Cartagena, Bolívar', {
+            explicacion: 'SQL, integraciones y Python en Cartagena: muy alineado con su perfil.',
+            fortalezas: ['SQL', 'Integraciones', 'Misma ciudad'], brechas: ['Airflow deseable'],
+            modalidad: 'hibrido', creada_en: new Date().toISOString(),
+          }));
+      }, 5500);
+    }
+    return responder(estadoActualizacion());
   }
 
   if (url.endsWith('/api/perfil/cv')) {

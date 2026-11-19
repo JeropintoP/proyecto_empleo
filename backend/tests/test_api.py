@@ -101,3 +101,65 @@ def test_subir_cv_valida_formato(cliente):
     h = _token(cliente)
     r = cliente.post("/api/perfil/cv", headers=h, files={"archivo": ("cv.exe", b"x", "application/octet-stream")})
     assert r.status_code == 400
+
+
+def test_cambiar_clave(cliente):
+    h = _token(cliente)
+    with mock.patch("app.rutas.cuenta.time.sleep"):
+        r = cliente.post("/api/yo/clave", headers=h, json={"actual": "mala", "nueva": "otra-clave-larga"})
+    assert r.status_code == 400 and "actual" in r.json()["detail"]
+    assert cliente.post("/api/yo/clave", headers=h, json={"actual": "clave-segura-1", "nueva": "corta"}).status_code == 422
+    assert cliente.post("/api/yo/clave", headers=h,
+                        json={"actual": "clave-segura-1", "nueva": "clave-segura-1"}).status_code == 400
+    assert cliente.post("/api/yo/clave", headers=h,
+                        json={"actual": "clave-segura-1", "nueva": "nueva-clave-2026"}).status_code == 204
+    # La vieja ya no sirve; la nueva si
+    with mock.patch("app.rutas.sesion.time.sleep"):
+        assert cliente.post("/api/auth/login", json={"email": "jeronimopinto@test.local",
+                                                     "clave": "clave-segura-1"}).status_code == 401
+    assert cliente.post("/api/auth/login", json={"email": "jeronimopinto@test.local",
+                                                 "clave": "nueva-clave-2026"}).status_code == 200
+
+
+def test_actualizar_ahora(cliente):
+    from app.db import sesion_transaccion
+
+    h = _token(cliente)
+    with sesion_transaccion() as s:
+        s.execute(text("DELETE FROM ejecuciones"))
+    with mock.patch("worker.tareas.actualizacion_diaria", return_value=True) as tarea:
+        r = cliente.post("/api/actualizar", headers=h)
+        assert r.status_code == 202 and r.json()["en_curso"] is True
+        tarea.assert_called_once_with(enviar_resumen=False)              # sin correo en la manual
+
+    estado = cliente.get("/api/actualizar", headers=h).json()
+    correo = next(f for f in estado["fuentes"] if f["codigo"] == "correo")
+    assert correo["configurada"] is True
+    assert next(f for f in estado["fuentes"] if f["codigo"] == "jooble")["configurada"] is False
+
+    with sesion_transaccion() as s:                                      # hubo una corrida hace 2 minutos
+        s.execute(text("INSERT INTO ejecuciones (fuente_id, estado, inicio, fin, vacantes_nuevas) "
+                       "VALUES (3, 'ok', now() - interval '2 minutes', now(), 5)"))
+    assert cliente.post("/api/actualizar", headers=h).status_code == 429
+    correo = next(f for f in cliente.get("/api/actualizar", headers=h).json()["fuentes"] if f["codigo"] == "correo")
+    assert (correo["estado"], correo["vacantes_nuevas"]) == ("ok", 5)
+
+
+def test_bloqueo_una_sola_actualizacion():
+    """Mientras una actualizacion corre, otra no arranca (bloqueo en PostgreSQL)."""
+    from sqlalchemy import create_engine
+
+    from worker import tareas
+
+    otra = create_engine(os.environ["DATABASE_URL"])
+    with otra.connect() as c:
+        c.execute(text("SELECT pg_advisory_lock(:k)"), {"k": tareas.LLAVE_BLOQUEO})
+        assert tareas.actualizacion_en_curso() is True
+        with mock.patch.object(tareas, "_ejecutar") as ejecutar:
+            assert tareas.actualizacion_diaria() is False
+            ejecutar.assert_not_called()
+        c.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": tareas.LLAVE_BLOQUEO})
+    assert tareas.actualizacion_en_curso() is False
+    with mock.patch.object(tareas, "_ejecutar") as ejecutar:
+        assert tareas.actualizacion_diaria() is True
+        ejecutar.assert_called_once_with(True)

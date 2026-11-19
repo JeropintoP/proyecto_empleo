@@ -86,4 +86,27 @@
       {{ guardando() ? "Guardando…" : "Guardar preferencias" }}
     </button>
   </form>
+
+  <form class="tarjeta preferencias" (ngSubmit)="cambiarClave()" autocomplete="off">
+    <h2>Seguridad</h2>
+    <label>
+      Clave actual
+      <input name="actual" type="password" autocomplete="current-password" required [(ngModel)]="claveActual" />
+    </label>
+    <div class="dos">
+      <label>
+        Clave nueva <span class="sutil">(mínimo 10 caracteres)</span>
+        <input name="nueva" type="password" autocomplete="new-password" required [(ngModel)]="claveNueva" />
+      </label>
+      <label>
+        Confirmar clave nueva
+        <input name="confirmacion" type="password" autocomplete="new-password" required [(ngModel)]="claveConfirmacion" />
+      </label>
+    </div>
+    @if (errorClave()) { <p class="error">{{ errorClave() }}</p> }
+    @if (avisoClave()) { <p class="aviso">{{ avisoClave() }}</p> }
+    <button type="submit" [disabled]="cambiandoClave() || !claveActual || !claveNueva || !claveConfirmacion">
+      {{ cambiandoClave() ? "Cambiando…" : "Cambiar clave" }}
+    </button>
+  </form>
 }

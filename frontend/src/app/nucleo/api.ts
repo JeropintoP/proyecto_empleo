@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
-import { Coincidencia, Estado, FiltrosTablero, Pagina, Perfil, Resumen } from './modelos';
+import { Coincidencia, Estado, EstadoActualizacion, FiltrosTablero, Pagina, Perfil, Resumen } from './modelos';
 
 @Injectable({ providedIn: 'root' })
 export class Api {
@@ -37,5 +37,17 @@ export class Api {
     const form = new FormData();
     form.append('archivo', archivo);
     return this.http.post<Perfil>('/api/perfil/cv', form);
+  }
+
+  cambiarClave(actual: string, nueva: string): Observable<void> {
+    return this.http.post<void>('/api/yo/clave', { actual, nueva });
+  }
+
+  estadoActualizacion(): Observable<EstadoActualizacion> {
+    return this.http.get<EstadoActualizacion>('/api/actualizar');
+  }
+
+  actualizarAhora(): Observable<EstadoActualizacion> {
+    return this.http.post<EstadoActualizacion>('/api/actualizar', {});
   }
 }
