@@ -210,17 +210,32 @@ _MODALIDAD_GOB = {"fully_remote": "remoto", "remote_local": "remoto", "temporari
                   "hybrid": "hibrido", "no_remote": "presencial"}
 
 
-def consultar_getonbrd(cliente: httpx.Client, palabras: str, ubicacion: str) -> list[VacanteExtraida]:
+def _pedir_getonbrd(cliente: httpx.Client, extra: dict, palabras: str) -> list[dict]:
     r = cliente.get("https://www.getonbrd.com/api/v0/search/jobs", params={
-        "query": palabras, "country_code": "COL", "per_page": 40, "page": 1,
-        "lang": "es", "expand": '["company"]',
+        "query": palabras, "per_page": 40, "page": 1, "lang": "es", "expand": '["company"]', **extra,
     })
     _revisar_respuesta(r, "Get on Board")
-    vacantes = []
-    for j in r.json().get("data") or []:
+    return r.json().get("data") or []
+
+
+def _admite_colombia(a: dict) -> bool:
+    paises = [p.lower() for p in a.get("countries") or []]
+    return not paises or any("colombia" in p for p in paises)
+
+
+def consultar_getonbrd(cliente: httpx.Client, palabras: str, ubicacion: str) -> list[VacanteExtraida]:
+    # 1) Vacantes publicadas en Colombia (country_code ISO de 2 letras: "CO", no "COL")
+    # 2) Vacantes remotas que admiten Colombia o no restringen pais (la mayoria en Get on Board)
+    resultados = _pedir_getonbrd(cliente, {"country_code": "CO"}, palabras)
+    resultados += [j for j in _pedir_getonbrd(cliente, {"remote": "true"}, palabras)
+                   if _admite_colombia(j.get("attributes") or {})]
+
+    vacantes, vistos = [], set()
+    for j in resultados:
         a, url = j.get("attributes") or {}, (j.get("links") or {}).get("public_url")
-        if not a.get("title") or not url:
+        if not a.get("title") or not url or j.get("id") in vistos:
             continue
+        vistos.add(j.get("id"))
         empresa = (((a.get("company") or {}).get("data") or {}).get("attributes") or {}).get("name")
         minimo, maximo = _entero(a.get("min_salary")), _entero(a.get("max_salary"))
         salario = (f"USD {minimo:,}–{maximo:,} (mensual)".replace(",", ".") if minimo and maximo

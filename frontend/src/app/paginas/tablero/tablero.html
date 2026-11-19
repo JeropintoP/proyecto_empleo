@@ -130,6 +130,8 @@
           <p class="sutil pie">
             @if (sitioPortal(c.portal); as sitio) {
               Fuente: <a [href]="sitio" target="_blank" rel="noopener">{{ portal(c.portal) }}</a> ·
+            } @else if (c.portal) {
+              Fuente: {{ portal(c.portal) }} ·
             }
             Recibida {{ c.creada_en | date: "d MMM" }}
             @if (c.postulada_en) { · Postulado {{ c.postulada_en | date: "d MMM" }} }

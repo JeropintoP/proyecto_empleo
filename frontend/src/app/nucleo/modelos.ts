@@ -73,3 +73,32 @@ export interface EstadoActualizacion {
   en_curso: boolean;
   fuentes: EstadoFuente[];
 }
+
+export type TipoEmpresa = 'smartrecruiters' | 'successfactors' | 'pagina';
+
+export interface Empresa {
+  id: number;
+  nombre: string;
+  tipo: TipoEmpresa;
+  identificador: string;
+  pais: string | null;
+  activa: boolean;
+  solo_para_mi: boolean;
+  ultima_revision: string | null;
+  ultimo_total: number | null;
+  ultimo_error: string | null;
+}
+
+export interface NuevaEmpresa {
+  nombre: string;
+  tipo: TipoEmpresa;
+  identificador: string;
+  pais: string | null;
+  solo_para_mi: boolean;
+}
+
+export interface PruebaEmpresa {
+  total: number;
+  error: string | null;
+  vacantes: { titulo: string; url: string; ubicacion: string | null }[];
+}

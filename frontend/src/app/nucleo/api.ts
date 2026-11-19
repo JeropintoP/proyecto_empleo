@@ -2,7 +2,9 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
-import { Coincidencia, Estado, EstadoActualizacion, FiltrosTablero, Pagina, Perfil, Resumen } from './modelos';
+import {
+  Coincidencia, Empresa, Estado, EstadoActualizacion, FiltrosTablero, NuevaEmpresa, Pagina, Perfil, PruebaEmpresa, Resumen,
+} from './modelos';
 
 @Injectable({ providedIn: 'root' })
 export class Api {
@@ -49,5 +51,25 @@ export class Api {
 
   actualizarAhora(): Observable<EstadoActualizacion> {
     return this.http.post<EstadoActualizacion>('/api/actualizar', {});
+  }
+
+  empresas(): Observable<Empresa[]> {
+    return this.http.get<Empresa[]>('/api/empresas');
+  }
+
+  agregarEmpresa(datos: NuevaEmpresa): Observable<Empresa> {
+    return this.http.post<Empresa>('/api/empresas', datos);
+  }
+
+  cambiarEmpresa(id: number, activa: boolean): Observable<Empresa> {
+    return this.http.patch<Empresa>(`/api/empresas/${id}`, { activa });
+  }
+
+  borrarEmpresa(id: number): Observable<void> {
+    return this.http.delete<void>(`/api/empresas/${id}`);
+  }
+
+  probarEmpresa(datos: NuevaEmpresa): Observable<PruebaEmpresa> {
+    return this.http.post<PruebaEmpresa>('/api/empresas/probar', datos);
   }
 }

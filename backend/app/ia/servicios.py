@@ -73,7 +73,7 @@ def generar_busquedas(usuario_id: str, lista: list[Proveedor] | None = None) -> 
     with sesion_transaccion() as s:
         perfil_id = s.execute(text("SELECT id FROM perfiles WHERE usuario_id = :u"),
                               {"u": usuario_id}).scalar_one()
-        fuentes = s.execute(text("SELECT id FROM fuentes WHERE tipo = 'api'")).scalars().all()
+        fuentes = s.execute(text("SELECT id FROM fuentes WHERE tipo = 'api' AND codigo <> 'empresas'")).scalars().all()
         # Las generadas antes por IA se reemplazan; las creadas a mano se conservan
         s.execute(text("DELETE FROM busquedas WHERE perfil_id = :p AND generada_por_ia"), {"p": perfil_id})
         for fuente_id in fuentes:

@@ -26,6 +26,9 @@ const PORTALES: Record<string, { nombre: string; sitio: string }> = {
   careerjet: { nombre: 'Careerjet', sitio: 'https://www.careerjet.com.co/' },
   himalayas: { nombre: 'Himalayas', sitio: 'https://himalayas.app/' },
   jobicy: { nombre: 'Jobicy', sitio: 'https://jobicy.com/' },
+  smartrecruiters: { nombre: 'Página de la empresa', sitio: '' },
+  successfactors: { nombre: 'Página de la empresa', sitio: '' },
+  empresa: { nombre: 'Página de la empresa', sitio: '' },
 };
 
 @Component({
@@ -185,7 +188,7 @@ export class Tablero implements OnInit, OnDestroy {
   }
 
   sitioPortal(p: string | null): string | null {
-    return PORTALES[p ?? '']?.sitio ?? null;
+    return PORTALES[p ?? '']?.sitio || null;
   }
 
   nivel(p: number | null): string {

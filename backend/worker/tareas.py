@@ -12,6 +12,7 @@ from app.db import motor, sesion_transaccion
 from app.ia.proveedor import ErrorIA
 from app.ia.servicios import evaluar_pendientes
 from worker.correo.recolector import recolectar as recolectar_correo
+from worker.empresas import recolectar_empresas
 from worker.notificar import enviar_resumenes
 from worker.recolectores_api import (recolectar_careerjet, recolectar_getonbrd, recolectar_himalayas,
                                      recolectar_jobicy, recolectar_jooble)
@@ -20,10 +21,10 @@ from worker.verificador import verificar
 log = logging.getLogger("worker")
 
 # codigo de fuente -> funcion recolectora
-# Get on Board, Himalayas y Jobicy son publicas: siempre activas. Jooble y Careerjet solo si hay key.
+# Get on Board, Himalayas, Jobicy y el monitor de empresas son publicos: siempre activos. Jooble y Careerjet solo si hay key.
 RECOLECTORES: dict[str, Callable[[], dict]] = {
     "correo": recolectar_correo, "getonbrd": recolectar_getonbrd,
-    "himalayas": recolectar_himalayas, "jobicy": recolectar_jobicy,
+    "himalayas": recolectar_himalayas, "jobicy": recolectar_jobicy, "empresas": recolectar_empresas,
 }
 if config().jooble_api_key:
     RECOLECTORES["jooble"] = recolectar_jooble

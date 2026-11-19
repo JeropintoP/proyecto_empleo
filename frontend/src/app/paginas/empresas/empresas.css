@@ -1,0 +1,33 @@
+:host { display: grid; gap: 16px; }
+h1 { margin: 0; }
+h2 { font-size: 16px; margin: 0; }
+.intro { margin: -8px 0 0; font-size: 14px; }
+
+.lista { display: grid; gap: 0; padding: 4px 20px; }
+.empresa { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 0; }
+.empresa + .empresa { border-top: 1px solid var(--linea); }
+.empresa.pausada .datos { opacity: .6; }
+.datos { display: grid; gap: 2px; min-width: 0; }
+.titulo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.etiqueta { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--fondo-2); color: var(--sutil); }
+.direccion { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.estado { margin: 2px 0 0; font-size: 13px; }
+.estado .error { font-size: 13px; }
+.acciones { display: flex; gap: 8px; flex-shrink: 0; }
+
+.formulario { display: grid; gap: 14px; }
+.formulario label { display: grid; gap: 6px; font-size: 14px; font-weight: 500; }
+.formulario .sutil { font-weight: 400; }
+.ayuda { font-size: 13px; }
+.casilla { display: flex !important; align-items: center; gap: 8px; align-self: end; padding-bottom: 8px; }
+.casilla input { width: auto; }
+.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.botones { display: flex; gap: 8px; }
+
+.prueba { display: grid; gap: 8px; }
+.prueba ul { margin: 0; padding-left: 20px; font-size: 14px; display: grid; gap: 4px; }
+
+@media (max-width: 640px) {
+  .dos { grid-template-columns: 1fr; }
+  .empresa { flex-direction: column; align-items: stretch; }
+}

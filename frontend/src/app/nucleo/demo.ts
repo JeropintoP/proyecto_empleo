@@ -5,7 +5,7 @@
 import { HttpInterceptorFn, HttpResponse } from '@angular/common/http';
 import { delay, of, throwError } from 'rxjs';
 
-import { Coincidencia, Estado, Perfil } from './modelos';
+import { Coincidencia, Empresa, Estado, NuevaEmpresa, Perfil } from './modelos';
 
 function dias(n: number): string {
   return new Date(Date.now() - n * 86_400_000).toISOString();
@@ -127,6 +127,13 @@ function estadoActualizacion() {
   };
 }
 
+let empresasDemo: Empresa[] = [
+  { id: 1, nombre: 'Astivik', tipo: 'pagina', identificador: 'https://astivik.buk.co/trabaja-con-nosotros', pais: null,
+    activa: true, solo_para_mi: false, ultima_revision: dias(0), ultimo_total: 3, ultimo_error: null },
+  { id: 2, nombre: 'Konecranes', tipo: 'smartrecruiters', identificador: 'konecranes', pais: 'co',
+    activa: true, solo_para_mi: false, ultima_revision: dias(0), ultimo_total: 1, ultimo_error: null },
+];
+
 const responder = <T>(cuerpo: T, ms = 250) => of(new HttpResponse({ status: 200, body: cuerpo })).pipe(delay(ms));
 const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -193,6 +200,36 @@ export const interceptorDemo: HttpInterceptorFn = (req, next) => {
       }, 5500);
     }
     return responder(estadoActualizacion());
+  }
+
+  if (url.endsWith('/api/empresas/probar')) {
+    const d = req.body as NuevaEmpresa;
+    return responder({ total: 2, error: null, vacantes: [
+      { titulo: 'Ingeniero mecánico de mantenimiento', url: '#', ubicacion: 'Cartagena' },
+      { titulo: `Inspector de calidad - ${d.nombre}`, url: '#', ubicacion: null },
+    ] }, 900);
+  }
+
+  const empresa = url.match(/\/api\/empresas\/(\d+)$/);
+  if (empresa) {
+    const id = Number(empresa[1]);
+    if (req.method === 'DELETE') {
+      empresasDemo = empresasDemo.filter((e) => e.id !== id);
+      return responder(null, 150);
+    }
+    const e = empresasDemo.find((x) => x.id === id);
+    if (e) e.activa = (req.body as { activa: boolean }).activa;
+    return responder(e, 150);
+  }
+
+  if (url.endsWith('/api/empresas')) {
+    if (req.method === 'POST') {
+      const d = req.body as NuevaEmpresa;
+      const nueva: Empresa = { ...d, id: Date.now(), activa: true, ultima_revision: null, ultimo_total: null, ultimo_error: null };
+      empresasDemo.push(nueva);
+      return responder(nueva, 300);
+    }
+    return responder(empresasDemo.map((e) => ({ ...e })));
   }
 
   if (url.endsWith('/api/perfil/cv')) {

@@ -161,7 +161,7 @@ def test_registro_condicional(monkeypatch):
     monkeypatch.setattr(config(), "jooble_api_key", "")
     monkeypatch.setattr(config(), "careerjet_api_key", "x")
     importlib.reload(tareas)
-    assert set(tareas.RECOLECTORES) == {"correo", "getonbrd", "himalayas", "jobicy", "careerjet"}
+    assert set(tareas.RECOLECTORES) == {"correo", "getonbrd", "himalayas", "jobicy", "empresas", "careerjet"}
 
 
 GETONBRD = {"data": [
@@ -181,6 +181,26 @@ GETONBRD = {"data": [
 ], "meta": {"page": 1, "per_page": 40, "total_pages": 1}}
 
 
+def test_getonbrd_remotas_que_admiten_colombia():
+    from worker.recolectores_api import consultar_getonbrd
+
+    remotas = {"data": [
+        {"id": "solo-chile", "attributes": {"title": "Dev", "countries": ["Chile"], "remote": True},
+         "links": {"public_url": "https://www.getonbrd.com/jobs/solo-chile"}},
+        {"id": "latam", "attributes": {"title": "Data Analyst", "countries": ["Chile", "Colombia", "Perú"],
+                                       "remote": True, "remote_modality": "fully_remote"},
+         "links": {"public_url": "https://www.getonbrd.com/jobs/latam"}},
+        {"id": "mundial", "attributes": {"title": "SRE", "countries": [], "remote": True},
+         "links": {"public_url": "https://www.getonbrd.com/jobs/mundial"}},
+    ]}
+
+    def manejar(req):
+        return httpx.Response(200, json=remotas if req.url.params.get("remote") else {"data": []})
+
+    ids = {v.id_portal for v in consultar_getonbrd(httpx.Client(transport=httpx.MockTransport(manejar)), "x", "")}
+    assert ids == {"latam", "mundial"}                                       # descarta la solo-Chile
+
+
 def test_getonbrd_sin_key(entorno):
     from app.db import sesion_transaccion
     from worker.recolectores_api import recolectar_getonbrd
@@ -191,10 +211,11 @@ def test_getonbrd_sin_key(entorno):
                             FROM busquedas WHERE fuente_id = (SELECT id FROM fuentes WHERE codigo='jooble')"""))
     peticiones = []
     r = recolectar_getonbrd(transporte(peticiones, {"www.getonbrd.com": (200, GETONBRD)}))
-    assert r["consultas"] == 3 and r["nuevas"] == 2
-    p = peticiones[0]
+    assert r["consultas"] == 3 and r["nuevas"] == 2                          # mismos ids: sin duplicados
+    p, remota = peticiones[0], peticiones[1]
     assert p.url.path == "/api/v0/search/jobs" and "Authorization" not in p.headers
-    assert p.url.params["country_code"] == "COL" and p.url.params["query"] == "DBA"
+    assert p.url.params["country_code"] == "CO" and p.url.params["query"] == "DBA"   # 2 letras (COL -> 422)
+    assert remota.url.params["remote"] == "true" and "country_code" not in remota.url.params
     with sesion_transaccion() as s:
         v = s.execute(text("SELECT * FROM vacantes WHERE id_externo = 'getonbrd:analista-de-datos-acme-bogota'")
                       ).mappings().one()

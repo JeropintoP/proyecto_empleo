@@ -9,6 +9,7 @@ export const routes: Routes = [
     canActivate: [requiereSesion],
     children: [
       { path: '', loadComponent: () => import('./paginas/tablero/tablero').then((m) => m.Tablero) },
+      { path: 'empresas', loadComponent: () => import('./paginas/empresas/empresas').then((m) => m.Empresas) },
       { path: 'perfil', loadComponent: () => import('./paginas/perfil/perfil').then((m) => m.Perfil) },
     ],
   },

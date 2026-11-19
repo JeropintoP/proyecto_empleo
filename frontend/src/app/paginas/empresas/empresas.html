@@ -1,0 +1,105 @@
+<h1>Empresas</h1>
+<p class="sutil intro">
+  Cada mañana se revisa la página de empleo de estas empresas. Las vacantes nuevas llegan al tablero
+  y la IA las califica según su perfil.
+</p>
+
+@if (error()) { <p class="error">{{ error() }}</p> }
+
+<section class="tarjeta lista">
+  @for (e of empresas(); track e.id) {
+    <div class="empresa" [class.pausada]="!e.activa">
+      <div class="datos">
+        <div class="titulo">
+          <strong>{{ e.nombre }}</strong>
+          <span class="etiqueta">{{ tipos[e.tipo].nombre }}</span>
+          @if (e.solo_para_mi) { <span class="etiqueta">Solo para mí</span> }
+          @if (!e.activa) { <span class="etiqueta">Pausada</span> }
+        </div>
+        <a class="sutil direccion" [href]="enlace(e)" target="_blank" rel="noopener">{{ enlace(e) }}</a>
+        <p class="estado">
+          @if (e.ultimo_error) {
+            <span class="error">Última revisión {{ e.ultima_revision | date: "d MMM, h:mm a" }}: {{ e.ultimo_error }}</span>
+          } @else if (e.ultima_revision) {
+            <span class="sutil">
+              Última revisión {{ e.ultima_revision | date: "d MMM, h:mm a" }} ·
+              {{ e.ultimo_total }} {{ e.ultimo_total === 1 ? "vacante publicada" : "vacantes publicadas" }}
+              @if (e.ultimo_total === 0 && e.tipo === "pagina") { (o la página no se puede leer sin JavaScript) }
+            </span>
+          } @else {
+            <span class="sutil">Aún no revisada: se revisa en la próxima actualización.</span>
+          }
+        </p>
+      </div>
+      <div class="acciones">
+        <button (click)="alternar(e)">{{ e.activa ? "Pausar" : "Reanudar" }}</button>
+        <button class="tenue" (click)="borrar(e)">Quitar</button>
+      </div>
+    </div>
+  } @empty {
+    @if (!cargando()) { <p class="sutil">Todavía no hay empresas. Agregue la primera abajo.</p> }
+  }
+</section>
+
+<form class="tarjeta formulario" (ngSubmit)="agregar()">
+  <h2>Agregar empresa</h2>
+  <div class="dos">
+    <label>
+      Nombre
+      <input name="nombre" required maxlength="120" [(ngModel)]="nueva.nombre" placeholder="Astivik" />
+    </label>
+    <label>
+      Tipo de página
+      <select name="tipo" [(ngModel)]="nueva.tipo" (ngModelChange)="cambioTipo()">
+        @for (t of listaTipos; track t) { <option [value]="t">{{ tipos[t].nombre }}</option> }
+      </select>
+    </label>
+  </div>
+  <label>
+    {{ tipos[nueva.tipo].campo }}
+    <input name="identificador" required [(ngModel)]="nueva.identificador" [placeholder]="tipos[nueva.tipo].ejemplo" />
+    <span class="sutil ayuda">{{ tipos[nueva.tipo].ayuda }}</span>
+  </label>
+  <div class="dos">
+    @if (nueva.tipo === "smartrecruiters") {
+      <label>
+        País <span class="sutil">(código de 2 letras; vacío = todos)</span>
+        <input name="pais" maxlength="2" [(ngModel)]="nueva.pais" placeholder="CO" />
+      </label>
+    }
+    <label class="casilla">
+      <input type="checkbox" name="solo" [(ngModel)]="nueva.solo_para_mi" />
+      Solo para mí <span class="sutil">(si no, la ven ambos usuarios)</span>
+    </label>
+  </div>
+
+  @if (errorFormulario()) { <p class="error">{{ errorFormulario() }}</p> }
+
+  @if (prueba(); as p) {
+    <div class="prueba">
+      @if (p.error) {
+        <p class="error">No se pudo leer: {{ p.error }}</p>
+      } @else if (p.total === 0) {
+        <p class="error">No se encontraron vacantes. Puede que hoy no haya ninguna publicada o que la página
+          no se pueda leer de esta forma.</p>
+      } @else {
+        <p class="aviso">Se encontraron {{ p.total }} {{ p.total === 1 ? "vacante" : "vacantes" }}{{ p.total > p.vacantes.length ? " (se muestran las primeras " + p.vacantes.length + ")" : "" }}:</p>
+        <ul>
+          @for (v of p.vacantes; track v.url) {
+            <li><a [href]="v.url" target="_blank" rel="noopener">{{ v.titulo }}</a>
+              @if (v.ubicacion) { <span class="sutil"> · {{ v.ubicacion }}</span> }</li>
+          }
+        </ul>
+      }
+    </div>
+  }
+
+  <div class="botones">
+    <button type="button" (click)="probar()" [disabled]="probando() || !nueva.nombre.trim() || !nueva.identificador.trim()">
+      {{ probando() ? "Probando…" : "Probar" }}
+    </button>
+    <button class="primario" type="submit" [disabled]="guardando() || !nueva.nombre.trim() || !nueva.identificador.trim()">
+      {{ guardando() ? "Agregando…" : "Agregar" }}
+    </button>
+  </div>
+</form>
