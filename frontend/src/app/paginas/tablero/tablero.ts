@@ -169,7 +169,10 @@ export class Tablero implements OnInit, OnDestroy {
   }
 
   portal(p: string | null): string {
-    return ({ linkedin: 'LinkedIn', computrabajo: 'Computrabajo', elempleo: 'Elempleo' } as Record<string, string>)[p ?? ''] ?? p ?? '';
+    return ({
+      linkedin: 'LinkedIn', computrabajo: 'Computrabajo', elempleo: 'Elempleo',
+      getonbrd: 'Get on Board', jooble: 'Jooble', careerjet: 'Careerjet',
+    } as Record<string, string>)[p ?? ''] ?? p ?? '';
   }
 
   nivel(p: number | null): string {

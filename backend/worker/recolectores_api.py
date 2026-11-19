@@ -1,4 +1,4 @@
-"""Recolectores por API: Jooble y Careerjet.
+"""Recolectores por API: Jooble, Careerjet y Get on Board.
 
 Cada corrida toma, por fuente, las N busquedas activas que hace mas tiempo no se consultan
 (N = parametro consultas_diarias_<fuente>) y guarda las vacantes con la misma logica del
@@ -13,7 +13,7 @@ import html
 import logging
 import re
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
 import httpx
@@ -173,6 +173,47 @@ def _recolectar(codigo: str, consultar: Callable, cliente: httpx.Client | None) 
         if propio:
             cliente.close()
     return total
+
+
+# ---------------------------------------------------------------------
+# Get on Board: GET https://www.getonbrd.com/api/v0/search/jobs  (publica, sin key)
+# Empleo tecnologico en Latinoamerica. Salarios en USD: se guardan solo como texto.
+# ---------------------------------------------------------------------
+_MODALIDAD_GOB = {"fully_remote": "remoto", "remote_local": "remoto", "temporarily_remote": "remoto",
+                  "hybrid": "hibrido", "no_remote": "presencial"}
+
+
+def consultar_getonbrd(cliente: httpx.Client, palabras: str, ubicacion: str) -> list[VacanteExtraida]:
+    r = cliente.get("https://www.getonbrd.com/api/v0/search/jobs", params={
+        "query": palabras, "country_code": "COL", "per_page": 40, "page": 1,
+        "lang": "es", "expand": '["company"]',
+    })
+    _revisar_respuesta(r, "Get on Board")
+    vacantes = []
+    for j in r.json().get("data") or []:
+        a, url = j.get("attributes") or {}, (j.get("links") or {}).get("public_url")
+        if not a.get("title") or not url:
+            continue
+        empresa = (((a.get("company") or {}).get("data") or {}).get("attributes") or {}).get("name")
+        minimo, maximo = _entero(a.get("min_salary")), _entero(a.get("max_salary"))
+        salario = (f"USD {minimo:,}–{maximo:,} (mensual)".replace(",", ".") if minimo and maximo
+                   else f"USD {(minimo or maximo):,} (mensual)".replace(",", ".") if (minimo or maximo) else None)
+        modalidad = _MODALIDAD_GOB.get(a.get("remote_modality") or "") or ("remoto" if a.get("remote") else None)
+        paises = ", ".join(a.get("countries") or []) or None
+        publicado = a.get("published_at")
+        descripcion = " ".join(filter(None, (_limpiar(a.get("description")), _limpiar(a.get("functions")))))
+        vacantes.append(VacanteExtraida(
+            portal="getonbrd", id_portal=str(j.get("id")), titulo=_limpiar(a["title"]), url=url,
+            empresa=_limpiar(empresa), ubicacion=paises, modalidad=modalidad, salario_texto=salario,
+            fecha_publicacion=datetime.fromtimestamp(publicado, tz=timezone.utc) if isinstance(publicado, int) else None,
+            descripcion=descripcion[:3000] or None,
+            extra={k: v for k, v in (("categoria", a.get("category_name")),) if v},
+        ))
+    return vacantes
+
+
+def recolectar_getonbrd(cliente: httpx.Client | None = None) -> dict:
+    return _recolectar("getonbrd", consultar_getonbrd, cliente)
 
 
 def recolectar_jooble(cliente: httpx.Client | None = None) -> dict:

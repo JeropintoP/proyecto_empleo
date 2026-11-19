@@ -121,4 +121,45 @@ def test_registro_condicional(monkeypatch):
     monkeypatch.setattr(config(), "jooble_api_key", "")
     monkeypatch.setattr(config(), "careerjet_api_key", "x")
     importlib.reload(tareas)
-    assert set(tareas.RECOLECTORES) == {"correo", "careerjet"}
+    assert set(tareas.RECOLECTORES) == {"correo", "getonbrd", "careerjet"}
+
+
+GETONBRD = {"data": [
+    {"id": "analista-de-datos-acme-bogota", "type": "job",
+     "attributes": {"title": "Analista de Datos", "description": "<p>SQL y <b>Power BI</b></p>",
+                    "functions": "<ul><li>Modelar datos</li></ul>", "benefits": "", "projects": "", "desirable": "",
+                    "remote": True, "remote_modality": "fully_remote", "countries": ["Colombia", "Perú"],
+                    "min_salary": 1500, "max_salary": 2200, "published_at": 1795000000,
+                    "category_name": "Data Science / Analytics",
+                    "company": {"data": {"id": "acme", "type": "company", "attributes": {"name": "ACME LatAm"}}}},
+     "links": {"public_url": "https://www.getonbrd.com/jobs/analista-de-datos-acme-bogota"}},
+    {"id": "dba-hibrido", "type": "job",
+     "attributes": {"title": "DBA PostgreSQL", "description": "", "functions": "", "remote": False,
+                    "remote_modality": "hybrid", "countries": ["Colombia"], "min_salary": 0, "max_salary": 0,
+                    "published_at": 1795000000, "company": {"data": {"attributes": {"name": "Datos SAS"}}}},
+     "links": {"public_url": "https://www.getonbrd.com/jobs/dba-hibrido"}},
+], "meta": {"page": 1, "per_page": 40, "total_pages": 1}}
+
+
+def test_getonbrd_sin_key(entorno):
+    from app.db import sesion_transaccion
+    from worker.recolectores_api import recolectar_getonbrd
+
+    with sesion_transaccion() as s:   # la migracion 004 copia las busquedas de Jooble a Get on Board
+        s.execute(text("""INSERT INTO busquedas (perfil_id, fuente_id, palabras_clave, ubicacion)
+                          SELECT perfil_id, (SELECT id FROM fuentes WHERE codigo='getonbrd'), palabras_clave, ubicacion
+                            FROM busquedas WHERE fuente_id = (SELECT id FROM fuentes WHERE codigo='jooble')"""))
+    peticiones = []
+    r = recolectar_getonbrd(transporte(peticiones, {"www.getonbrd.com": (200, GETONBRD)}))
+    assert r["consultas"] == 3 and r["nuevas"] == 2
+    p = peticiones[0]
+    assert p.url.path == "/api/v0/search/jobs" and "Authorization" not in p.headers
+    assert p.url.params["country_code"] == "COL" and p.url.params["query"] == "DBA"
+    with sesion_transaccion() as s:
+        v = s.execute(text("SELECT * FROM vacantes WHERE id_externo = 'getonbrd:analista-de-datos-acme-bogota'")
+                      ).mappings().one()
+        assert (v["empresa"], v["modalidad"], v["ubicacion"]) == ("ACME LatAm", "remoto", "Colombia, Perú")
+        assert v["salario_texto"] == "USD 1.500–2.200 (mensual)" and v["salario_min"] is None   # no se mezcla con COP
+        assert v["descripcion"] == "SQL y Power BI Modelar datos"
+        h = s.execute(text("SELECT modalidad::text, salario_texto FROM vacantes WHERE id_externo = 'getonbrd:dba-hibrido'")).one()
+        assert h == ("hibrido", None)
