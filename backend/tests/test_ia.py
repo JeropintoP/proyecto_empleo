@@ -23,7 +23,13 @@ class ProveedorFalso:
                     "cargos_objetivo": ["Administrador de bases de datos", "Analista de datos"],
                     "habilidades": [{"nombre": "PostgreSQL", "nivel": "avanzado"}],
                     "anios_experiencia": 2, "nivel_educativo": "Profesional",
-                    "idiomas": [{"idioma": "Ingles", "nivel": "B2"}]}, {"entrada": 100, "salida": 50}
+                    "idiomas": [{"idioma": "Ingles", "nivel": "B2"}],
+                    "carreras": ["Ingenieria de Sistemas"], "anios_experiencia_area": 1, "ciudad": "Cartagena, Bolivar",
+                    "experiencias": [
+                        {"cargo": "Practicante TIC", "empresa": "Clinica", "anios": 1, "tipo": "practica", "relacionada": True},
+                        {"cargo": "Asesor", "empresa": "Call center", "anios": 1, "tipo": "empleo", "relacionada": False,
+                         "extra": "se ignora"}, "basura"],
+                    "palabras_excluir_sugeridas": ["Call Center", " ", "servicio al cliente"]}, {"entrada": 100, "salida": 50}
         if "consultas" in sistema:
             return {"busquedas": [{"palabras_clave": "DBA", "ubicacion": "Cartagena"},
                                   {"palabras_clave": "analista de datos", "ubicacion": "Colombia"}]}, {}
@@ -67,6 +73,32 @@ def test_perfil_y_busquedas(usuario):
     generar_busquedas(usuario, lista=[falso])  # regenerar no duplica
     with sesion_transaccion() as s:
         assert s.execute(text("SELECT count(*) FROM busquedas")).scalar() == 12
+
+
+def test_experiencia_separada_ciudad_y_exclusiones(usuario):
+    from app.db import sesion_transaccion
+    from app.ia.servicios import perfilar_cv
+
+    with sesion_transaccion() as s:   # sin exclusiones ni ciudades: se toman las sugeridas y la del CV
+        s.execute(text("UPDATE perfiles SET palabras_excluir = '{}', ciudades = '{}' WHERE usuario_id = :u"), {"u": usuario})
+    perfilar_cv(usuario, "cv " * 50, "cv.pdf", lista=[ProveedorFalso()])
+    with sesion_transaccion() as s:
+        p = s.execute(text("""SELECT carreras, experiencias, anios_experiencia, anios_experiencia_area, ciudades,
+                                     palabras_excluir FROM perfiles WHERE usuario_id = :u"""), {"u": usuario}).one()
+    assert p.carreras == ["Ingenieria de Sistemas"]
+    assert (float(p.anios_experiencia), float(p.anios_experiencia_area)) == (2, 1)
+    assert [(e["cargo"], e["relacionada"], e["tipo"]) for e in p.experiencias] == [
+        ("Practicante TIC", True, "practica"), ("Asesor", False, "empleo")]
+    assert "extra" not in p.experiencias[1]
+    assert p.ciudades == ["Cartagena"] and p.palabras_excluir == ["call center", "servicio al cliente"]
+
+    with sesion_transaccion() as s:   # si la persona ya las configuro, no se tocan
+        s.execute(text("UPDATE perfiles SET palabras_excluir = ARRAY['ventas'], ciudades = ARRAY['Barranquilla'] WHERE usuario_id = :u"),
+                  {"u": usuario})
+    perfilar_cv(usuario, "cv " * 50, "cv.pdf", lista=[ProveedorFalso()])
+    with sesion_transaccion() as s:
+        p = s.execute(text("SELECT ciudades, palabras_excluir FROM perfiles WHERE usuario_id = :u"), {"u": usuario}).one()
+    assert (p.ciudades, p.palabras_excluir) == (["Barranquilla"], ["ventas"])
 
 
 def test_evaluar_con_exclusion_y_respaldo(usuario):

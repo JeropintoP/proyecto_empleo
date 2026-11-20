@@ -19,6 +19,28 @@ def _normalizar(t: str) -> str:
 # ---------------------------------------------------------------------
 # 1. Perfilar CV
 # ---------------------------------------------------------------------
+def _numero(valor) -> float | None:
+    try:
+        return round(float(valor), 1)
+    except (TypeError, ValueError):
+        return None
+
+
+def _experiencias(lista) -> list[dict]:
+    """Solo los campos esperados y con tipos seguros (la IA a veces agrega o cambia cosas)."""
+    resultado = []
+    for e in lista or []:
+        if not isinstance(e, dict) or not (e.get("cargo") or e.get("empresa")):
+            continue
+        resultado.append({
+            "cargo": str(e.get("cargo") or "")[:150], "empresa": str(e.get("empresa") or "")[:150],
+            "desde": str(e.get("desde") or "")[:20], "hasta": str(e.get("hasta") or "")[:20],
+            "anios": _numero(e.get("anios")), "tipo": "practica" if e.get("tipo") == "practica" else "empleo",
+            "relacionada": bool(e.get("relacionada")),
+        })
+    return resultado[:20]
+
+
 def perfilar_cv(usuario_id: str, cv_texto: str, cv_archivo: str | None = None,
                 lista: list[Proveedor] | None = None) -> dict:
     perfil, modelo = consultar("perfilar", prompts.PERFILAR_CV, cv_texto[:20000], lista)
@@ -33,6 +55,15 @@ def perfilar_cv(usuario_id: str, cv_texto: str, cv_archivo: str | None = None,
                        anios_experiencia = :anios,
                        nivel_educativo = :educacion,
                        idiomas = CAST(:idiomas AS jsonb),
+                       carreras = :carreras,
+                       experiencias = CAST(:experiencias AS jsonb),
+                       anios_experiencia_area = :anios_area,
+                       -- La ciudad del CV y las exclusiones sugeridas solo se usan si la persona
+                       -- no ha configurado las suyas (luego las edita en su perfil)
+                       ciudades = CASE WHEN cardinality(ciudades) = 0 AND CAST(:ciudad AS text) IS NOT NULL
+                                       THEN ARRAY[CAST(:ciudad AS text)] ELSE ciudades END,
+                       palabras_excluir = CASE WHEN cardinality(palabras_excluir) = 0
+                                               THEN CAST(:excluir AS text[]) ELSE palabras_excluir END,
                        perfil_ia = CAST(:completo AS jsonb),
                        modelo_ia = :modelo,
                        actualizado_en = now()
@@ -45,6 +76,12 @@ def perfilar_cv(usuario_id: str, cv_texto: str, cv_archivo: str | None = None,
              "anios": perfil.get("anios_experiencia"),
              "educacion": perfil.get("nivel_educativo"),
              "idiomas": json.dumps(perfil.get("idiomas") or [], ensure_ascii=False),
+             "carreras": [str(c)[:120] for c in perfil.get("carreras") or []][:5],
+             "experiencias": json.dumps(_experiencias(perfil.get("experiencias")), ensure_ascii=False),
+             "anios_area": _numero(perfil.get("anios_experiencia_area")),
+             "ciudad": (str(perfil["ciudad"]).split(",")[0].strip()[:100] or None) if perfil.get("ciudad") else None,
+             "excluir": [str(p).strip().lower()[:100] for p in perfil.get("palabras_excluir_sugeridas") or []
+                         if str(p).strip()][:6],
              "completo": json.dumps(perfil, ensure_ascii=False), "modelo": modelo},
         )
     return perfil
@@ -52,12 +89,13 @@ def perfilar_cv(usuario_id: str, cv_texto: str, cv_archivo: str | None = None,
 
 def _perfil_para_ia(s, usuario_id: str) -> dict:
     fila = s.execute(
-        text("""SELECT resumen, cargos_objetivo, habilidades, anios_experiencia, nivel_educativo,
-                       idiomas, ciudades, modalidad::text AS modalidad, salario_minimo, palabras_excluir
+        text("""SELECT resumen, carreras, cargos_objetivo, habilidades, experiencias, anios_experiencia,
+                       anios_experiencia_area, nivel_educativo, idiomas, ciudades, modalidad::text AS modalidad,
+                       salario_minimo, palabras_excluir
                   FROM perfiles WHERE usuario_id = :u"""),
         {"u": usuario_id},
     ).mappings().one()
-    return {k: (float(v) if k == "anios_experiencia" and v is not None else v) for k, v in fila.items()}
+    return {k: (float(v) if k.startswith("anios_experiencia") and v is not None else v) for k, v in fila.items()}
 
 
 # ---------------------------------------------------------------------

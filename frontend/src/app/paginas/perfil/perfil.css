@@ -23,3 +23,15 @@ dd { margin: 0; }
 .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 640px) { .dos { grid-template-columns: 1fr; } }
 .preferencias button { justify-self: start; }
+
+.experiencias { list-style: none; padding: 0; margin: 0 0 4px; display: grid; gap: 8px; }
+.experiencias li { display: flex; justify-content: space-between; gap: 12px; align-items: center; font-size: 14px; }
+.experiencias li.ajena { opacity: .7; }
+.etiquetas { display: flex; gap: 6px; flex-shrink: 0; }
+.chip[data-relacion="si"] { background: #e7f6ec; color: #1d7a3a; }
+.chip[data-relacion="no"] { background: var(--fondo-2); color: var(--sutil); }
+.nota { font-size: 13px; margin: 0; }
+.campo { display: grid; gap: 8px; font-size: 14px; font-weight: 500; }
+.chip.quitable { display: inline-flex; align-items: center; gap: 4px; padding-right: 4px; }
+.quitar { border: 0; background: none; padding: 0 4px; font-size: 16px; line-height: 1; color: var(--sutil); cursor: pointer; }
+.quitar:hover { color: var(--texto); }

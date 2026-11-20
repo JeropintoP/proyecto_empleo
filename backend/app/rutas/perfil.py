@@ -12,7 +12,8 @@ from app.db import obtener_sesion
 
 router = APIRouter(tags=["perfil"])
 
-_CAMPOS = """resumen, cargos_objetivo, habilidades, anios_experiencia, nivel_educativo, idiomas,
+_CAMPOS = """resumen, carreras, cargos_objetivo, habilidades, experiencias, anios_experiencia,
+             anios_experiencia_area, nivel_educativo, idiomas,
              ciudades, modalidad::text AS modalidad, salario_minimo, palabras_excluir,
              cv_archivo, modelo_ia, actualizado_en"""
 
@@ -21,8 +22,9 @@ def _leer(sesion: Session, usuario_id) -> dict:
     perfil = dict(sesion.execute(
         text(f"SELECT {_CAMPOS} FROM perfiles WHERE usuario_id = :u"), {"u": usuario_id}
     ).mappings().one())
-    if perfil["anios_experiencia"] is not None:
-        perfil["anios_experiencia"] = float(perfil["anios_experiencia"])
+    for k in ("anios_experiencia", "anios_experiencia_area"):
+        if perfil[k] is not None:
+            perfil[k] = float(perfil[k])
     perfil["busquedas"] = [dict(b) for b in sesion.execute(
         text("""SELECT DISTINCT b.palabras_clave, b.ubicacion FROM busquedas b
                   JOIN perfiles p ON p.id = b.perfil_id

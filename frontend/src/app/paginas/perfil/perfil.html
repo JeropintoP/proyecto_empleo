@@ -26,13 +26,44 @@
       <h2>Lo que entendió la IA</h2>
       <p>{{ p.resumen }}</p>
       <dl>
+        @if (p.carreras.length) { <dt>Carreras</dt><dd>{{ p.carreras.join(" · ") }}</dd> }
         @if (p.nivel_educativo) { <dt>Educación</dt><dd>{{ p.nivel_educativo }}</dd> }
-        @if (p.anios_experiencia !== null) { <dt>Experiencia</dt><dd>{{ p.anios_experiencia }} años</dd> }
+        @if (p.anios_experiencia !== null) {
+          <dt>Experiencia</dt>
+          <dd>
+            @if (p.anios_experiencia_area !== null) {
+              <strong>{{ p.anios_experiencia_area }} {{ p.anios_experiencia_area === 1 ? "año" : "años" }} en su área</strong>
+              · {{ p.anios_experiencia }} en total
+            } @else {
+              {{ p.anios_experiencia }} años
+            }
+          </dd>
+        }
         @if (p.idiomas.length) {
           <dt>Idiomas</dt>
           <dd>@for (i of p.idiomas; track $index) { {{ i.idioma }} ({{ i.nivel }}){{ $last ? "" : ", " }} }</dd>
         }
       </dl>
+      @if (p.experiencias.length) {
+        <h3>Experiencia</h3>
+        <ul class="experiencias">
+          @for (e of p.experiencias; track $index) {
+            <li [class.ajena]="!e.relacionada">
+              <span>
+                <strong>{{ e.cargo }}</strong> · {{ e.empresa }}
+                <span class="sutil"> · {{ e.desde }} – {{ e.hasta }}@if (e.anios !== null) { ({{ e.anios }} {{ e.anios === 1 ? "año" : "años" }}) }</span>
+              </span>
+              <span class="etiquetas">
+                @if (e.tipo === "practica") { <span class="chip">Práctica</span> }
+                <span class="chip" [attr.data-relacion]="e.relacionada ? 'si' : 'no'">
+                  {{ e.relacionada ? "De su área" : "Otra área" }}
+                </span>
+              </span>
+            </li>
+          }
+        </ul>
+        <p class="sutil nota">La IA compara los años que pide cada vacante con la experiencia de su área.</p>
+      }
       @if (p.habilidades.length) {
         <h3>Habilidades</h3>
         <div class="chips">
@@ -78,10 +109,21 @@
         <input name="salario" type="number" min="0" step="100000" [(ngModel)]="salario" />
       </label>
     </div>
-    <label>
-      Descartar vacantes que contengan <span class="sutil">(separadas por coma)</span>
-      <input name="excluir" [(ngModel)]="excluir" placeholder="vendedor, call center" />
-    </label>
+    <div class="campo">
+      <span>Descartar vacantes que contengan</span>
+      <div class="chips">
+        @for (palabra of excluir(); track palabra) {
+          <span class="chip quitable">
+            {{ palabra }}
+            <button type="button" class="quitar" [attr.aria-label]="'Quitar ' + palabra" (click)="quitarExclusion(palabra)">×</button>
+          </span>
+        } @empty {
+          <span class="sutil">Ninguna.</span>
+        }
+      </div>
+      <input name="nuevaExclusion" [(ngModel)]="nuevaExclusion" placeholder="Escriba una palabra y presione Enter"
+             (keydown.enter)="$event.preventDefault(); agregarExclusion()" />
+    </div>
     <button class="primario" type="submit" [disabled]="guardando()">
       {{ guardando() ? "Guardando…" : "Guardar preferencias" }}
     </button>

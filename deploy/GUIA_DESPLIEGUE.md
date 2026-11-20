@@ -173,6 +173,7 @@ docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/005_himala
 docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/006_empresas.sql
 docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/007_spe.sql
 docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/008_cada_3_horas.sql
+docker compose exec -T db psql -U empleo -d proyecto_empleo < db/init/009_experiencia_separada.sql
 ```
 
 ## Activar Jooble y Careerjet (cuando lleguen las keys)

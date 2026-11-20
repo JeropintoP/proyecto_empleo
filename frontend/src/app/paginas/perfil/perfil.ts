@@ -35,7 +35,8 @@ export class Perfil implements OnInit {
   // Formulario de preferencias
   cargos = '';
   ciudades = '';
-  excluir = '';
+  readonly excluir = signal<string[]>([]);
+  nuevaExclusion = '';
   modalidad: Modalidad = 'indiferente';
   salario: number | null = null;
 
@@ -51,7 +52,7 @@ export class Perfil implements OnInit {
     this.perfil.set(p);
     this.cargos = p.cargos_objetivo.join(', ');
     this.ciudades = p.ciudades.join(', ');
-    this.excluir = p.palabras_excluir.join(', ');
+    this.excluir.set([...p.palabras_excluir]);
     this.modalidad = p.modalidad;
     this.salario = p.salario_minimo;
   }
@@ -83,7 +84,7 @@ export class Perfil implements OnInit {
         this.api.guardarPerfil({
           cargos_objetivo: lista(this.cargos),
           ciudades: lista(this.ciudades),
-          palabras_excluir: lista(this.excluir),
+          palabras_excluir: this.excluir(),
           modalidad: this.modalidad,
           salario_minimo: this.salario || null,
         }),
@@ -94,6 +95,30 @@ export class Perfil implements OnInit {
       this.error.set(mensajeError(e));
     } finally {
       this.guardando.set(false);
+    }
+  }
+
+  agregarExclusion(): void {
+    const nuevas = lista(this.nuevaExclusion.toLowerCase()).filter((x) => !this.excluir().includes(x));
+    this.nuevaExclusion = '';
+    if (nuevas.length) this.guardarExclusiones([...this.excluir(), ...nuevas]);
+  }
+
+  quitarExclusion(palabra: string): void {
+    this.guardarExclusiones(this.excluir().filter((x) => x !== palabra));
+  }
+
+  /** Las exclusiones se guardan al instante (sin esperar "Guardar preferencias"). */
+  private async guardarExclusiones(palabras: string[]): Promise<void> {
+    const antes = this.excluir();
+    this.excluir.set(palabras);
+    this.error.set('');
+    try {
+      const p = await firstValueFrom(this.api.guardarPerfil({ palabras_excluir: palabras }));
+      this.perfil.set(p);
+    } catch (e) {
+      this.excluir.set(antes);
+      this.error.set(mensajeError(e));
     }
   }
 

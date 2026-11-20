@@ -37,11 +37,24 @@ export interface Resumen {
   ultima_actualizacion: string | null;
 }
 
+export interface Experiencia {
+  cargo: string;
+  empresa: string;
+  desde: string;
+  hasta: string;
+  anios: number | null;
+  tipo: 'empleo' | 'practica';
+  relacionada: boolean;
+}
+
 export interface Perfil {
   resumen: string | null;
+  carreras: string[];
   cargos_objetivo: string[];
   habilidades: { nombre: string; nivel: string }[];
+  experiencias: Experiencia[];
   anios_experiencia: number | null;
+  anios_experiencia_area: number | null;
   nivel_educativo: string | null;
   idiomas: { idioma: string; nivel: string }[];
   ciudades: string[];
