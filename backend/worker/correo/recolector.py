@@ -42,6 +42,17 @@ def dias_a_leer(s: Session, fuente_id: int) -> int:
     return int(min(max(dias, DIAS_MIN), DIAS_MAX))
 
 
+def _corte(texto: str | None, maximo: int) -> str | None:
+    return texto if texto is None or len(texto) <= maximo else texto[: maximo - 1] + "…"
+
+
+def _id_corto(id_externo: str) -> str:
+    """id_externo admite 200 caracteres; los mas largos (URL) se resumen con un hash estable."""
+    if len(id_externo) <= 200:
+        return id_externo
+    return id_externo[:160] + ":" + hashlib.md5(id_externo.encode()).hexdigest()
+
+
 def _plano(texto: str | None) -> str:
     t = unicodedata.normalize("NFKD", (texto or "").lower())
     return " ".join(re.findall(r"[a-z0-9]+", "".join(c for c in t if not unicodedata.combining(c))))
@@ -79,7 +90,7 @@ def guardar_vacante(s: Session, fuente_id: int, usuario_id: str, v: VacanteExtra
     existente = s.execute(
         text("""SELECT id, vacante_reprocesable(id) AS repro
                   FROM vacantes WHERE fuente_id = :f AND id_externo = :e"""),
-        {"f": fuente_id, "e": v.id_externo},
+        {"f": fuente_id, "e": _id_corto(v.id_externo)},
     ).first()
 
     if existente is None:
@@ -92,8 +103,8 @@ def guardar_vacante(s: Session, fuente_id: int, usuario_id: str, v: VacanteExtra
                         :sal_txt, :sal_min, :sal_max, :url, :fecha, :desc, :huella, CAST(:datos AS jsonb))
                 RETURNING id
             """),
-            {"f": fuente_id, "e": v.id_externo, "titulo": v.titulo, "empresa": v.empresa,
-             "ubicacion": v.ubicacion, "modalidad": v.modalidad, "sal_txt": v.salario_texto,
+            {"f": fuente_id, "e": _id_corto(v.id_externo), "titulo": _corte(v.titulo, 300), "empresa": _corte(v.empresa, 200),
+             "ubicacion": _corte(v.ubicacion, 200), "modalidad": v.modalidad, "sal_txt": _corte(v.salario_texto, 120),
              "sal_min": v.salario_min, "sal_max": v.salario_max, "url": v.url,
              "fecha": v.fecha_publicacion, "desc": v.descripcion, "huella": _huella(v),
              "datos": json.dumps({"portal": v.portal, **v.extra}, ensure_ascii=False)},

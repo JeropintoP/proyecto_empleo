@@ -27,7 +27,7 @@ from sqlalchemy import text
 from app.db import sesion_transaccion
 from worker.correo.modelos import VacanteExtraida
 from worker.correo.recolector import guardar_vacante
-from worker.recolectores_api import AGENTE, _fecha, _limpiar, _revisar_respuesta
+from worker.recolectores_api import _fecha, _limpiar, _revisar_respuesta, nuevo_cliente
 
 log = logging.getLogger("worker.empresas")
 
@@ -64,7 +64,7 @@ def _vigilar_peticion(req: httpx.Request) -> None:
 
 
 def cliente_publico() -> httpx.Client:
-    return httpx.Client(timeout=30, follow_redirects=True, headers={"User-Agent": AGENTE},
+    return nuevo_cliente(follow_redirects=True,
                         event_hooks={"request": [_vigilar_peticion]})
 
 

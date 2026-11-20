@@ -194,3 +194,36 @@ def test_cupo_diario_de_evaluaciones():
         assert cupo_evaluaciones(s) == 3
         s.execute(text("UPDATE parametros SET valor = '60' WHERE clave = 'evaluaciones_diarias'"))
         s.execute(text("DELETE FROM uso_ia"))
+
+
+def test_ubicacion_remota_y_cortes():
+    from worker.correo.recolector import _corte, _id_corto
+    from worker.recolectores_api import _ubicacion_remota
+
+    assert _ubicacion_remota([]) == "Remoto (mundial)"
+    assert _ubicacion_remota(["Colombia", "México"]) == "Remoto: Colombia, México"
+    assert _ubicacion_remota([f"País {i}" for i in range(30)] + ["Colombia"]) == "Remoto (31 países, incluye Colombia)"
+    assert _ubicacion_remota([f"País {i}" for i in range(30)]) == "Remoto (30 países)"
+    assert len(_corte("x" * 500, 200)) == 200 and _corte(None, 10) is None
+    largo = "himalayas:https://himalayas.app/" + "a" * 300
+    assert len(_id_corto(largo)) <= 200 and _id_corto(largo) == _id_corto(largo) and _id_corto("corto") == "corto"
+
+
+def test_certificados_adicionales(tmp_path, monkeypatch):
+    import ssl
+
+    from worker import recolectores_api as r
+
+    r.contexto_ssl.cache_clear()
+    assert isinstance(r.contexto_ssl(), ssl.SSLContext)
+    vacio = tmp_path / "nada"
+    vacio.mkdir()
+    monkeypatch.setattr(r, "_CERTIFICADOS", vacio)
+    r.contexto_ssl.cache_clear()
+    base = r.contexto_ssl().cert_store_stats()["x509_ca"]
+    import certifi
+    (vacio / "extra.pem").write_text(open(certifi.where()).read().split("-----END CERTIFICATE-----")[0]
+                                     + "-----END CERTIFICATE-----\n")
+    r.contexto_ssl.cache_clear()
+    assert r.contexto_ssl().cert_store_stats()["x509_ca"] >= base
+    r.contexto_ssl.cache_clear()

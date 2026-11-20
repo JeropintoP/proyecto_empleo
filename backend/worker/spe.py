@@ -22,7 +22,7 @@ from sqlalchemy import text
 from app.db import sesion_transaccion
 from worker.correo.modelos import VacanteExtraida
 from worker.correo.recolector import guardar_vacante
-from worker.recolectores_api import AGENTE, _fecha, _limpiar, _revisar_respuesta, coincide
+from worker.recolectores_api import _fecha, _limpiar, _revisar_respuesta, coincide, nuevo_cliente
 
 log = logging.getLogger("worker.spe")
 
@@ -107,11 +107,11 @@ def recolectar_spe(cliente: httpx.Client | None = None, pausa: float = PAUSA_SEG
         return total
 
     ahora = datetime.now(timezone.utc)
-    # Margen de un dia: el SPE publica con fecha sin hora
-    desde = (ultima - timedelta(days=1)) if ultima else ahora - timedelta(days=14)
+    # Margen de 3 dias: el SPE publica con fecha sin hora y las vacantes aparecen con ~2 dias de retraso
+    desde = (ultima - timedelta(days=3)) if ultima else ahora - timedelta(days=14)
 
     propio = cliente is None
-    cliente = cliente or httpx.Client(timeout=30, headers={"User-Agent": AGENTE})
+    cliente = cliente or nuevo_cliente()
     try:
         for departamento in departamentos:
             for pagina in range(1, max_paginas + 1):

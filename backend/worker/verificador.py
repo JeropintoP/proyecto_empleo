@@ -17,6 +17,7 @@ import httpx
 from sqlalchemy import text
 
 from app.db import sesion_transaccion
+from worker.recolectores_api import nuevo_cliente
 
 log = logging.getLogger("worker.verificador")
 
@@ -80,7 +81,7 @@ def verificar(cliente: httpx.Client | None = None, pausa: float = PAUSA_SEGUNDOS
         ).all()
 
     propio = cliente is None
-    cliente = cliente or httpx.Client(headers=CABECERAS, timeout=20, follow_redirects=True,
+    cliente = cliente or nuevo_cliente(headers=CABECERAS, timeout=20, follow_redirects=True,
                                       event_hooks={"request": [_solo_publicas]})
     try:
         for i, (vacante_id, url) in enumerate(pendientes):

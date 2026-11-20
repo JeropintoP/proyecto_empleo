@@ -9,15 +9,19 @@ Si la fuente responde 401/403 (key invalida o revocada) o 429 (cupo agotado), se
 fuente en la corrida y el error queda en `ejecuciones`.
 """
 import hashlib
-import math
 import html
 import logging
+import math
 import re
+import ssl
 import unicodedata
 from collections.abc import Callable
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from functools import lru_cache
+from pathlib import Path
 
+import certifi
 import httpx
 from sqlalchemy import text
 
@@ -31,6 +35,25 @@ from worker.correo.recolector import guardar_vacante
 log = logging.getLogger("worker.api")
 
 AGENTE = "ProyectoEmpleo/1.0 (+https://jeropintop.github.io/proyecto_empleo/)"
+
+
+_CERTIFICADOS = Path(__file__).parent / "certificados"
+
+
+@lru_cache
+def contexto_ssl() -> ssl.SSLContext:
+    """Certificados normales (certifi) + los intermedios de worker/certificados/*.pem,
+    para sitios que no envian su cadena completa (ver worker/certificados/LEEME.md)."""
+    contexto = ssl.create_default_context(cafile=certifi.where())
+    for pem in sorted(_CERTIFICADOS.glob("*.pem")):
+        contexto.load_verify_locations(cafile=str(pem))
+    return contexto
+
+
+def nuevo_cliente(**opciones) -> httpx.Client:
+    opciones.setdefault("timeout", 30)
+    opciones.setdefault("headers", {"User-Agent": AGENTE})
+    return httpx.Client(verify=contexto_ssl(), **opciones)
 
 
 class FuenteDetenida(Exception):
@@ -124,9 +147,12 @@ def _pedir_careerjet(cliente: httpx.Client, palabras: str, ubicacion: str | None
         params["location"] = ubicacion
     r = cliente.get("https://search.api.careerjet.net/v4/query", params=params,
                     auth=(cfg.careerjet_api_key, ""),
-                    headers={"Referer": "https://jeropintop.github.io/proyecto_empleo/"})
+                    headers={"Referer": cfg.careerjet_referer})
     if r.status_code == 400:
         raise FuenteDetenida(f"Careerjet: {r.text[:150]} (revise CAREERJET_LOCALE)")
+    if r.status_code in (401, 403):
+        raise FuenteDetenida(f"Careerjet rechazo el acceso ({r.status_code}): {r.text[:200]} "
+                             "(revise CAREERJET_API_KEY y que CAREERJET_REFERER sea el sitio registrado)")
     _revisar_respuesta(r, "Careerjet")
     return r.json()
 
@@ -185,7 +211,7 @@ def _recolectar(codigo: str, consultar: Callable, cliente: httpx.Client | None, 
         ).all()
 
     propio = cliente is None
-    cliente = cliente or httpx.Client(timeout=30, headers={"User-Agent": AGENTE})
+    cliente = cliente or nuevo_cliente()
     try:
         for b in busquedas:
             palabras = (b.palabras_clave_en or b.palabras_clave) if en_ingles else b.palabras_clave
@@ -283,6 +309,17 @@ def _salario_texto(minimo, maximo, moneda: str | None, tipo: str) -> str | None:
 # Himalayas: GET https://himalayas.app/jobs/api/search?q=...&country=CO  (publica, sin key)
 # Terminos: postular siempre por applicationLink y dar credito visible a Himalayas.
 # ---------------------------------------------------------------------
+def _ubicacion_remota(paises: list[str | None]) -> str:
+    """'Remoto: Colombia, México' o, si son muchos, 'Remoto (35 países, incluye Colombia)'."""
+    paises = [p for p in paises if p]
+    if not paises:
+        return "Remoto (mundial)"
+    if len(paises) <= 4:
+        return "Remoto: " + ", ".join(paises)
+    incluye = " incluye Colombia" if any("colombia" in p.lower() for p in paises) else ""
+    return f"Remoto ({len(paises)} países{',' + incluye if incluye else ''})"
+
+
 def consultar_himalayas(cliente: httpx.Client, palabras: str, ubicacion: str) -> list[VacanteExtraida]:
     r = cliente.get("https://himalayas.app/jobs/api/search",
                     params={"q": palabras, "country": "CO", "sort": "recent", "page": 1})
@@ -298,7 +335,7 @@ def consultar_himalayas(cliente: httpx.Client, palabras: str, ubicacion: str) ->
         vacantes.append(VacanteExtraida(
             portal="himalayas", id_portal=str(j.get("guid") or hashlib.md5(url.encode()).hexdigest()),
             titulo=_limpiar(j["title"]), url=url, empresa=_limpiar(j.get("companyName")),
-            ubicacion=("Remoto: " + ", ".join(filter(None, paises))) if paises else "Remoto (mundial)",
+            ubicacion=_ubicacion_remota(paises),
             modalidad="remoto",
             salario_texto=_salario_texto(j.get("minSalary"), j.get("maxSalary"), j.get("currency"), tipo),
             salario_min=_salario_mensual_cop(j.get("minSalary"), j.get("currency"), tipo),
@@ -370,7 +407,7 @@ def recolectar_jobicy(cliente: httpx.Client | None = None) -> dict:
         return total
 
     propio = cliente is None
-    cliente = cliente or httpx.Client(timeout=30, headers={"User-Agent": AGENTE})
+    cliente = cliente or nuevo_cliente()
     try:
         r = cliente.get("https://jobicy.com/api/v2/remote-jobs", params={"geo": "latam", "count": 100})
         _revisar_respuesta(r, "Jobicy")

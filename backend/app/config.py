@@ -24,6 +24,7 @@ class Config(BaseSettings):
     careerjet_api_key: str = ""
     careerjet_locale: str = "es_CO"
     careerjet_user_ip: str = ""              # IP publica del servidor
+    careerjet_referer: str = "https://jeropintop.github.io/"  # el sitio registrado en Careerjet
 
     dominio: str = ""
     healthcheck_url: str = ""      # p. ej. https://hc-ping.com/<uuid> (Healthchecks.io, gratis)
