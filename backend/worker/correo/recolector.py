@@ -1,7 +1,7 @@
 """Recolector de alertas por correo.
 
 Flujo por cada mensaje:
-  1. Identifica al usuario por el alias (+jeronimopinto / +helenvisbal).
+  1. Identifica al usuario por la carpeta (etiqueta) donde esta: Empleos/<nombre o alias>.
   2. Elige el lector segun el portal remitente.
   3. Guarda cada vacante aplicando la regla de reproceso (abierta + 3 dias).
   4. Crea o reactiva la coincidencia para ese usuario.
@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.config import config
 from app.db import sesion_transaccion
-from worker.correo.imap import alias_destino, mensajes_recientes
+from worker.correo.imap import alias_destino, mensajes_por_carpeta, normalizar
 from worker.correo.lectores import lector_para, remitente_original
 from worker.correo.modelos import VacanteExtraida
 
@@ -209,13 +209,24 @@ def recolectar() -> dict:
     with sesion_transaccion() as s:
         fuente_id = s.execute(text("SELECT id FROM fuentes WHERE codigo = 'correo'")).scalar_one()
         dias = dias_a_leer(s, fuente_id)
-    log.info("Leyendo el buzon: ultimos %s dias", dias)
+        # Carpeta -> alias: "Jeronimo Pinto" o "jeronimopinto" -> alias del usuario
+        usuarios = {}
+        for alias, nombre in s.execute(text("SELECT alias_correo, nombre FROM usuarios WHERE activo AND alias_correo IS NOT NULL")).all():
+            usuarios[normalizar(alias)] = alias
+            usuarios[normalizar(nombre)] = alias
+    log.info("Leyendo las carpetas de alertas: ultimos %s dias", dias)
     total["dias_leidos"] = dias
 
-    for msg in mensajes_recientes(dias):
+    sin_usuario = set()
+    for carpeta, msg in mensajes_por_carpeta(dias):
+        alias = usuarios.get(normalizar(carpeta))
+        if alias is None:
+            sin_usuario.add(carpeta)
+            total["omitidos"] += 1
+            continue
         try:
             with sesion_transaccion() as s:  # un correo con error no afecta a los demas
-                r = procesar_mensaje(s, fuente_id, msg)
+                r = procesar_mensaje(s, fuente_id, msg, alias=alias)
         except Exception:
             log.exception("Error procesando una alerta de %s", str(msg.get("From", ""))[:60])
             total["errores"] += 1
@@ -229,4 +240,6 @@ def recolectar() -> dict:
         total["correos"] += 1
         for k in ("leidas", "nuevas", "reprocesadas"):
             total[k] += r[k]
+    for carpeta in sin_usuario:
+        log.warning("La carpeta '%s' no corresponde a ningun usuario (use su nombre o alias)", carpeta)
     return total

@@ -227,3 +227,48 @@ def test_certificados_adicionales(tmp_path, monkeypatch):
     r.contexto_ssl.cache_clear()
     assert r.contexto_ssl().cert_store_stats()["x509_ca"] >= base
     r.contexto_ssl.cache_clear()
+
+
+def test_carpetas_imap():
+    from worker.correo.imap import _utf7_imap, normalizar, subcarpetas
+
+    class ImapFalso:
+        def list(self):
+            return "OK", [
+                b'(\\HasNoChildren) "/" "INBOX"',
+                b'(\\HasChildren) "/" "EMPLEOS"',
+                b'(\\HasNoChildren) "/" "EMPLEOS/Jeronimo Pinto"',
+                b'(\\HasNoChildren) "/" "Empleos/Helen Visbal"',
+                b'(\\HasNoChildren) "/" "Empleos/Jer&APM-nimo/Viejo"',
+                b'(\\Noselect \\HasChildren) "/" "Empleos/Grupo"',
+                b'(\\HasNoChildren) "/" "EmpleosX/Otro"',
+            ]
+
+    assert subcarpetas(ImapFalso(), "Empleos") == [("EMPLEOS/Jeronimo Pinto", "Jeronimo Pinto"),
+                                                   ("Empleos/Helen Visbal", "Helen Visbal")]
+    assert _utf7_imap("Jer&APM-nimo &- Co") == "Jerónimo & Co"
+    assert normalizar("Jerónimo Pinto") == normalizar("jeronimopinto") == "jeronimopinto"
+
+
+@con_bd
+def test_recolectar_por_carpeta(monkeypatch):
+    from app.db import sesion_transaccion
+    from worker.correo import recolector
+
+    with sesion_transaccion() as s:
+        _usuarios(s)
+        s.execute(text("UPDATE usuarios SET nombre = 'Helen Visbal' WHERE alias_correo = 'helenvisbal'"))
+    vistos = []
+
+    def falso_procesar(s, fuente_id, msg, alias=None):
+        vistos.append(alias)
+        return {"leidas": 1, "nuevas": 1, "reprocesadas": 0}
+
+    personal = EmailMessage()
+    personal["From"] = "promo@temu.com"
+    monkeypatch.setattr(recolector, "mensajes_por_carpeta", lambda dias: iter([
+        ("Helen Visbal", personal), ("jeronimopinto", personal), ("Otra persona", personal)]))
+    monkeypatch.setattr(recolector, "procesar_mensaje", falso_procesar)
+    total = recolector.recolectar()
+    assert vistos == ["helenvisbal", "jeronimopinto"]          # carpeta por nombre o por alias
+    assert (total["correos"], total["omitidos"]) == (2, 1)    # carpeta sin usuario: se omite

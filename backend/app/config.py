@@ -35,6 +35,7 @@ class Config(BaseSettings):
     imap_servidor: str = "imap.gmail.com"
     imap_usuario: str = ""
     imap_clave_aplicacion: str = ""
+    imap_carpeta: str = "Empleos"          # solo se leen sus subcarpetas (una por usuario)
 
     @field_validator("jwt_secreto")
     @classmethod
